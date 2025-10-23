@@ -1,0 +1,48 @@
+# Archivos de configuración sensibles
+conexion.php
+config.php
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+error_log
+
+# Archivos temporales
+*.tmp
+*.temp
+*.cache
+
+# Backups
+*.bak
+*.backup
+*~
+
+# Composer (si se usa en el futuro)
+/vendor/
+composer.lock
+
+# Node modules (si se usa en el futuro)
+node_modules/
+package-lock.json
+
+# Archivos de base de datos locales
+*.sqlite
+*.db
+
+# Archivos de sessión de PHP
+/tmp/
+/sessions/
+
+# Scripts de actualización (después de ejecutar)
+update_passwords.php

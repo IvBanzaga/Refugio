@@ -1,0 +1,295 @@
+/* ============================================
+   ESTILOS PERSONALIZADOS - SISTEMA REFUGIO
+   ============================================ */
+
+:root {
+    --color-primary: #1e3a8a;
+    --color-secondary: #15803d;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #dc2626;
+    --color-info: #3b82f6;
+    --border-radius: 8px;
+    --transition-speed: 0.3s;
+}
+
+/* ============================================
+   ANIMACIONES GENERALES
+   ============================================ */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.slide-in {
+    animation: slideIn 0.5s ease-in-out;
+}
+
+/* ============================================
+   ESTILOS DE CARDS
+   ============================================ */
+
+.card {
+    transition: transform var(--transition-speed), box-shadow var(--transition-speed);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ============================================
+   ESTILOS DE BOTONES
+   ============================================ */
+
+.btn {
+    transition: all var(--transition-speed);
+    border-radius: var(--border-radius);
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+/* ============================================
+   ESTILOS DE FORMULARIOS
+   ============================================ */
+
+.form-control,
+.form-select {
+    border-radius: var(--border-radius);
+    transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 0.25rem rgba(30, 58, 138, 0.25);
+}
+
+/* ============================================
+   ESTILOS DE TABLAS
+   ============================================ */
+
+.table {
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+}
+
+.table tbody tr {
+    transition: background-color var(--transition-speed);
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* ============================================
+   ESTILOS DE BADGES
+   ============================================ */
+
+.badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 500;
+}
+
+/* ============================================
+   ESTILOS DE ALERTAS
+   ============================================ */
+
+.alert {
+    border-radius: var(--border-radius);
+    border-left: 4px solid;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.alert-success {
+    border-left-color: var(--color-success);
+}
+
+.alert-warning {
+    border-left-color: var(--color-warning);
+}
+
+.alert-danger {
+    border-left-color: var(--color-danger);
+}
+
+.alert-info {
+    border-left-color: var(--color-info);
+}
+
+/* ============================================
+   ESTILOS DE MODALES
+   ============================================ */
+
+.modal-content {
+    border-radius: var(--border-radius);
+    border: none;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    border-bottom: 2px solid #e9ecef;
+}
+
+.modal-footer {
+    border-top: 2px solid #e9ecef;
+}
+
+/* ============================================
+   ESTILOS RESPONSIVOS
+   ============================================ */
+
+@media (max-width: 768px) {
+    .sidebar {
+        min-height: auto;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .card-stat {
+        margin-bottom: 1rem;
+    }
+}
+
+/* ============================================
+   ESTILOS DE CALENDARIO
+   ============================================ */
+
+.calendario {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+
+@media (max-width: 768px) {
+    .calendario {
+        gap: 4px;
+    }
+    
+    .dia-calendario {
+        padding: 4px;
+        font-size: 0.75rem;
+    }
+}
+
+/* ============================================
+   UTILIDADES PERSONALIZADAS
+   ============================================ */
+
+.shadow-soft {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07) !important;
+}
+
+.rounded-lg {
+    border-radius: var(--border-radius) !important;
+}
+
+.transition-all {
+    transition: all var(--transition-speed) ease-in-out;
+}
+
+/* ============================================
+   SCROLL PERSONALIZADO
+   ============================================ */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* ============================================
+   LOADING SPINNER
+   ============================================ */
+
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15rem;
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+    .sidebar,
+    .btn,
+    .alert,
+    .no-print {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #dee2e6;
+        box-shadow: none;
+    }
+    
+    .table {
+        font-size: 0.875rem;
+    }
+}
