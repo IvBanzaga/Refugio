@@ -51,13 +51,14 @@ CREATE TABLE camas (
 -- 4. Reservas
 CREATE TABLE reservas (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    id_usuario INT NOT NULL,
+    id_usuario INT NULL COMMENT 'NULL para reservas especiales del admin',
     id_habitacion INT NOT NULL,
     numero_camas TINYINT NOT NULL DEFAULT 1,
     id_cama INT NULL, -- Campo legacy para compatibilidad
     fecha_inicio DATE NOT NULL,
     fecha_fin DATE NOT NULL,
     estado ENUM('pendiente', 'reservada', 'cancelada') NOT NULL DEFAULT 'pendiente',
+    observaciones VARCHAR(500) NULL COMMENT 'Motivo/evento para reservas especiales',
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_reserva_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios(id) ON DELETE CASCADE,
     CONSTRAINT fk_reserva_habitacion FOREIGN KEY (id_habitacion) REFERENCES habitaciones(id) ON DELETE CASCADE,

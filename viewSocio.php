@@ -9,6 +9,10 @@
     }
     session_regenerate_id(true);
 
+    // Obtener información del usuario (incluida la foto de perfil)
+    $usuario_info        = obtener_info_usuario($conexionPDO, $_SESSION['userId']);
+    $foto_perfil_sidebar = $usuario_info['foto_perfil'] ?? null;
+
     $mensaje      = '';
     $tipo_mensaje = 'success';
     $accion       = isset($_POST['accion']) ? $_POST['accion'] : (isset($_GET['accion']) ? $_GET['accion'] : 'calendario');
@@ -22,13 +26,13 @@
 
                     // Validar número de camas
                     $numero_camas = (int) $_POST['numero_camas'];
-                    if ($numero_camas < 1 || $numero_camas > 3) {
-                        throw new Exception("El número de camas debe ser entre 1 y 3");
+                    if ($numero_camas < 1) {
+                        throw new Exception("Debes reservar al menos 1 cama");
                     }
 
                     // Validar acompañantes según número de camas
                     $num_acompanantes        = isset($_POST['acompanantes']) ? count($_POST['acompanantes']) : 0;
-                    $acompanantes_requeridos = $numero_camas - 1; // 1 cama = 0 acompañantes, 2 camas = 1, 3 camas = 2
+                    $acompanantes_requeridos = $numero_camas - 1; // 1 cama = 0 acompañantes, 2 camas = 1, etc.
 
                     if ($num_acompanantes != $acompanantes_requeridos) {
                         throw new Exception("Debes agregar exactamente $acompanantes_requeridos acompañante(s) para $numero_camas cama(s)");
@@ -121,9 +125,18 @@
     function mes_espanol($mes)
     {
         $meses = [
-            1 => 'Enero', 2       => 'Febrero', 3  => 'Marzo', 4      => 'Abril',
-            5 => 'Mayo', 6        => 'Junio', 7    => 'Julio', 8      => 'Agosto',
-            9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+            1  => 'Enero',
+            2  => 'Febrero',
+            3  => 'Marzo',
+            4  => 'Abril',
+            5  => 'Mayo',
+            6  => 'Junio',
+            7  => 'Julio',
+            8  => 'Agosto',
+            9  => 'Septiembre',
+            10 => 'Octubre',
+            11 => 'Noviembre',
+            12 => 'Diciembre',
         ];
         return $meses[(int) $mes];
     }
@@ -155,6 +168,7 @@
 
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -166,22 +180,26 @@
             min-height: 100vh;
             background: linear-gradient(180deg, #15803d 0%, #22c55e 100%);
         }
+
         .sidebar .nav-link {
-            color: rgba(255,255,255,0.8);
+            color: rgba(255, 255, 255, 0.8);
             padding: 12px 20px;
             transition: all 0.3s;
         }
+
         .sidebar .nav-link:hover,
         .sidebar .nav-link.active {
             color: #fff;
-            background-color: rgba(255,255,255,0.1);
+            background-color: rgba(255, 255, 255, 0.1);
             border-left: 3px solid #fff;
         }
+
         .calendario {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
             gap: 5px;
         }
+
         .dia-calendario {
             aspect-ratio: 1;
             border: 1px solid #dee2e6;
@@ -192,47 +210,65 @@
             position: relative;
             background: white;
         }
+
         .dia-calendario:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
+
         .dia-calendario.vacio {
             background: #f8f9fa;
             cursor: default;
         }
+
         .dia-calendario.vacio:hover {
             transform: none;
             box-shadow: none;
         }
+
         .dia-calendario.pasado {
             background: #e9ecef;
             color: #6c757d;
             cursor: not-allowed;
         }
+
         .dia-calendario.pasado:hover {
             transform: none;
         }
+
         .dia-calendario.seleccionado {
             background: #0d6efd;
             color: white;
             border-color: #0d6efd;
         }
+
         .dia-calendario .numero-dia {
             font-weight: bold;
             font-size: 1.1em;
         }
+
         .dia-calendario .camas-disponibles {
-            font-size: 0.75em;
-            margin-top: 4px;
+            font-size: 0.95em;
+            margin-top: 5px;
+            font-weight: 600;
         }
+
+        .dia-calendario .camas-disponibles .texto-libres {
+            color: #155724;
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+
         .dia-calendario.lleno {
             background: #dc3545;
             color: white;
             cursor: not-allowed;
         }
+
         .dia-calendario.pocas-camas {
             background: #ffc107;
         }
+
         .dia-calendario.mi-reserva-aprobada {
             background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
             color: white;
@@ -240,10 +276,12 @@
             font-weight: bold;
             box-shadow: 0 4px 12px rgba(13, 110, 253, 0.4);
         }
+
         .dia-calendario.mi-reserva-aprobada:hover {
             transform: translateY(-5px);
             box-shadow: 0 6px 16px rgba(13, 110, 253, 0.6);
         }
+
         .dia-calendario.mi-reserva-pendiente {
             background: linear-gradient(135deg, #0dcaf0 0%, #0aa2c0 100%);
             color: white;
@@ -251,10 +289,12 @@
             font-weight: bold;
             box-shadow: 0 4px 12px rgba(13, 202, 240, 0.4);
         }
+
         .dia-calendario.mi-reserva-pendiente:hover {
             transform: translateY(-5px);
             box-shadow: 0 6px 16px rgba(13, 202, 240, 0.6);
         }
+
         .dia-semana {
             text-align: center;
             font-weight: bold;
@@ -262,6 +302,7 @@
             background: #f8f9fa;
             border-radius: 8px;
         }
+
         .acompanante-row {
             background: #f8f9fa;
             padding: 15px;
@@ -270,6 +311,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container-fluid">
         <div class="row">
@@ -278,21 +320,34 @@
                 <div class="p-3 text-white border-bottom">
                     <h4><i class="bi bi-house-heart-fill"></i> Refugio</h4>
                     <small>Panel Usuario</small>
-                    <div class="mt-2">
-                        <small><?php echo htmlspecialchars($_SESSION['user']) ?></small>
+                    <div class="mt-3 text-center">
+                        <?php if ($foto_perfil_sidebar && file_exists(__DIR__ . '/' . $foto_perfil_sidebar)): ?>
+                            <img src="<?php echo htmlspecialchars($foto_perfil_sidebar) ?>"
+                                 alt="Foto de perfil"
+                                 class="img-fluid rounded-circle mb-2"
+                                 style="width: 80px; height: 80px; object-fit: cover; border: 3px solid #fff;">
+                        <?php else: ?>
+                            <div class="bg-light text-dark rounded-circle d-inline-flex align-items-center justify-content-center mb-2"
+                                 style="width: 80px; height: 80px; font-size: 40px;">
+                                <i class="bi bi-person-fill"></i>
+                            </div>
+                        <?php endif; ?>
+                        <div class="mt-2">
+                            <small class="fw-bold"><?php echo htmlspecialchars($_SESSION['user']) ?></small>
+                        </div>
                     </div>
                 </div>
                 <nav class="nav flex-column mt-3">
-                    <a class="nav-link                                                                                                                                                                                                                                     <?php echo $accion === 'calendario' ? 'active' : '' ?>" href="?accion=calendario">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $accion === 'calendario' ? 'active' : '' ?>" href="?accion=calendario">
                         <i class="bi bi-calendar3"></i> Calendario
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                     <?php echo $accion === 'nueva_reserva' ? 'active' : '' ?>" href="?accion=nueva_reserva">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $accion === 'nueva_reserva' ? 'active' : '' ?>" href="?accion=nueva_reserva">
                         <i class="bi bi-plus-circle-fill"></i> Nueva Reserva
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                     <?php echo $accion === 'mis_reservas' ? 'active' : '' ?>" href="?accion=mis_reservas">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $accion === 'mis_reservas' ? 'active' : '' ?>" href="?accion=mis_reservas">
                         <i class="bi bi-list-check"></i> Mis Reservas
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                     <?php echo $accion === 'perfil' ? 'active' : '' ?>" href="?accion=perfil">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $accion === 'perfil' ? 'active' : '' ?>" href="?accion=perfil">
                         <i class="bi bi-person-circle"></i> Mi Perfil
                     </a>
                     <hr class="text-white">
@@ -324,12 +379,12 @@
                         <div class="card-header bg-success text-white">
                             <div class="d-flex justify-content-between align-items-center">
                                 <a href="?accion=calendario&mes=<?php echo $mes_anterior ?>&anio=<?php echo $anio_anterior ?>"
-                                   class="btn btn-sm btn-light">
+                                    class="btn btn-sm btn-light">
                                     <i class="bi bi-chevron-left"></i>
                                 </a>
                                 <h5 class="mb-0"><?php echo mes_espanol($mes_actual) ?> <?php echo $anio_actual ?></h5>
                                 <a href="?accion=calendario&mes=<?php echo $mes_siguiente ?>&anio=<?php echo $anio_siguiente ?>"
-                                   class="btn btn-sm btn-light">
+                                    class="btn btn-sm btn-light">
                                     <i class="bi bi-chevron-right"></i>
                                 </a>
                             </div>
@@ -370,14 +425,14 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-				                                            SELECT r.id, r.estado, h.numero as habitacion, c.numero as cama
-				                                            FROM reservas r
-				                                            JOIN camas c ON r.id_cama = c.id
-				                                            JOIN habitaciones h ON c.id_habitacion = h.id
-				                                            WHERE r.id_usuario = :id_usuario
-				                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-				                                            AND r.estado IN ('pendiente', 'reservada')
-				                                        ");
+											                                            SELECT r.id, r.estado, h.numero as habitacion, c.numero as cama
+											                                            FROM reservas r
+											                                            JOIN camas c ON r.id_cama = c.id
+											                                            JOIN habitaciones h ON c.id_habitacion = h.id
+											                                            WHERE r.id_usuario = :id_usuario
+											                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+											                                            AND r.estado IN ('pendiente', 'reservada')
+											                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -385,11 +440,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-				                                            SELECT COUNT(*) as total
-				                                            FROM reservas
-				                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-				                                            AND estado = 'reservada'
-				                                        ");
+											                                            SELECT COUNT(*) as total
+											                                            FROM reservas
+											                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+											                                            AND estado = 'reservada'
+											                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -420,9 +475,9 @@
                                     }
                                 ?>
                                     <div class="<?php echo $clase ?>" data-fecha="<?php echo $fecha ?>"
-                                         <?php if ($mi_reserva): ?>
-                                            title="<?php echo $info_extra ?>"
-                                         <?php endif; ?>>
+                                        <?php if ($mi_reserva): ?>
+                                        title="<?php echo $info_extra ?>"
+                                        <?php endif; ?>>
                                         <div class="numero-dia"><?php echo $dia ?></div>
                                         <?php if (! $es_pasado): ?>
                                             <?php if ($mi_reserva): ?>
@@ -431,7 +486,8 @@
                                                 </div>
                                             <?php else: ?>
                                                 <div class="camas-disponibles">
-                                                    <small><?php echo $camas_libres ?>/<?php echo $total_camas ?> libres</small>
+                                                    <span class="texto-libres"><?php echo $camas_libres ?>/<?php echo $total_camas ?></span>
+                                                    <small class="d-block">libres</small>
                                                     <?php if ($total_reservas_aprobadas > 0): ?>
                                                         <small class="d-block text-muted"><?php echo $total_reservas_aprobadas ?> reserva<?php echo $total_reservas_aprobadas > 1 ? 's' : '' ?></small>
                                                     <?php endif; ?>
@@ -450,6 +506,7 @@
 
                     <form method="post" id="formReserva">
                         <input type="hidden" name="accion" value="crear_reserva">
+                        <input type="hidden" name="numero_camas" id="numeroCamasInput" value="1">
 
                         <div class="card shadow-sm mb-4">
                             <div class="card-header bg-success text-white">
@@ -457,44 +514,44 @@
                             </div>
                             <div class="card-body">
                                 <div class="row">
-                                    <div class="col-md-3">
+                                    <div class="col-md-4">
                                         <label class="form-label">Fecha de Entrada *</label>
                                         <input type="date" name="fecha_inicio" id="fecha_inicio" class="form-control"
-                                               min="<?php echo date('Y-m-d') ?>" required
-                                               onchange="actualizarDisponibilidad()">
+                                            min="<?php echo date('Y-m-d') ?>" required
+                                            onchange="actualizarDisponibilidad()">
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-4">
                                         <label class="form-label">Fecha de Salida *</label>
                                         <input type="date" name="fecha_fin" id="fecha_fin" class="form-control"
-                                               min="<?php echo date('Y-m-d') ?>" required
-                                               onchange="actualizarDisponibilidad()">
+                                            min="<?php echo date('Y-m-d') ?>" required
+                                            onchange="actualizarDisponibilidad()">
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-4">
                                         <label class="form-label">Habitación *</label>
                                         <select name="id_habitacion" id="selectHabitacion" class="form-select" required
-                                                onchange="validarNumeroCamas()">
+                                            onchange="habilitarSelectorCamas()">
                                             <option value="">Seleccione primero las fechas</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Número de Camas *</label>
-                                        <select name="numero_camas" id="selectNumeroCamas" class="form-select" required
-                                                onchange="actualizarAcompanantes()">
-                                            <option value="">Seleccione habitación</option>
                                         </select>
                                     </div>
                                 </div>
                                 <div class="row mt-3">
                                     <div class="col-12">
-                                        <div class="alert alert-info mb-0">
-                                            <i class="bi bi-info-circle-fill"></i>
-                                            <strong>Importante:</strong>
-                                            <ul class="mb-0 mt-2">
-                                                <li><strong>1 cama:</strong> Solo para ti (sin acompañantes)</li>
-                                                <li><strong>2 camas:</strong> Tú + 1 acompañante (obligatorio)</li>
-                                                <li><strong>3 camas:</strong> Tú + 2 acompañantes (obligatorios)</li>
-                                            </ul>
+                                        <label class="form-label">Número de Camas *</label>
+                                        <div class="input-group" style="max-width: 250px;">
+                                            <button type="button" class="btn btn-outline-secondary" id="btnDecrementar"
+                                                onclick="cambiarNumeroCamas(-1)" disabled>
+                                                <i class="bi bi-dash-lg"></i>
+                                            </button>
+                                            <input type="text" class="form-control text-center fw-bold"
+                                                id="displayNumeroCamas" value="1" readonly>
+                                            <button type="button" class="btn btn-outline-secondary" id="btnIncrementar"
+                                                onclick="cambiarNumeroCamas(1)" disabled>
+                                                <i class="bi bi-plus-lg"></i>
+                                            </button>
                                         </div>
+                                        <small class="text-muted mt-2 d-block" id="infoAcompanantes">
+                                            Selecciona una habitación para elegir el número de camas
+                                        </small>
                                     </div>
                                 </div>
                             </div>
@@ -506,7 +563,7 @@
                             </div>
                             <div class="card-body">
                                 <textarea name="actividad" class="form-control" rows="3"
-                                          placeholder="Describe la actividad que realizarás durante tu estancia..."></textarea>
+                                    placeholder="Describe la actividad que realizarás durante tu estancia..."></textarea>
                             </div>
                         </div>
 
@@ -528,7 +585,7 @@
                             </div>
                             <div class="card-body">
                                 <textarea name="comentarios" class="form-control" rows="3"
-                                          placeholder="Añade cualquier comentario o solicitud especial..."></textarea>
+                                    placeholder="Añade cualquier comentario o solicitud especial..."></textarea>
                             </div>
                         </div>
 
@@ -572,7 +629,7 @@
                                         <tbody>
                                             <?php foreach ($pendientes as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                         <?php echo $reserva['habitacion_numero'] ?></td>
+                                                    <td>Hab.                                                                                                                                                                                     <?php echo $reserva['habitacion_numero'] ?></td>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -582,7 +639,7 @@
                                                             <input type="hidden" name="accion" value="cancelar_reserva">
                                                             <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
                                                             <button type="submit" class="btn btn-sm btn-danger"
-                                                                    onclick="return confirm('¿Cancelar esta reserva?')">
+                                                                onclick="return confirm('¿Cancelar esta reserva?')">
                                                                 <i class="bi bi-x-circle"></i> Cancelar
                                                             </button>
                                                         </form>
@@ -625,7 +682,7 @@
                                                     $dias = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
                                                 ?>
 			                                                <tr>
-			                                                    <td>Hab.			                                                            		                                                             <?php echo $reserva['habitacion_numero'] ?></td>
+			                                                    <td>Hab.			                                                            		                                                            	                                                             <?php echo $reserva['habitacion_numero'] ?></td>
 			                                                    <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
 			                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
 			                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -670,7 +727,7 @@
                                         <tbody>
                                             <?php foreach ($canceladas as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                             <?php echo $reserva['habitacion_numero'] ?></td>
+                                                    <td>Hab.                                                                                                                                                                                     <?php echo $reserva['habitacion_numero'] ?></td>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -683,26 +740,26 @@
                         </div>
                     <?php endif; ?>
 
-                <!-- SECCIÓN: Mi Perfil -->
+                    <!-- SECCIÓN: Mi Perfil -->
                 <?php elseif ($accion === 'perfil'):
                         $usuario     = obtener_info_usuario($conexionPDO, $_SESSION['userId']);
                         $foto_perfil = $usuario['foto_perfil'] ?? null;
                     ?>
-						                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
-						                    <hr>
+			                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
+			                    <hr>
 
-						                    <div class="row">
-						                        <!-- Foto de Perfil -->
-						                        <div class="col-md-4">
-						                            <div class="card shadow-sm">
-						                                <div class="card-header bg-primary text-white">
-						                                    <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Foto de Perfil</h5>
-						                                </div>
-						                                <div class="card-body text-center">
-						                                    <div id="fotoPerfilContainer" class="mb-3">
-						                                        <?php if ($foto_perfil && file_exists(__DIR__ . '/' . $foto_perfil)): ?>
-						                                            <img src="<?php echo htmlspecialchars($foto_perfil) ?>" alt="Foto de perfil" class="img-fluid rounded-circle" style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #0d6efd;">
-						                                        <?php else: ?>
+			                    <div class="row">
+			                        <!-- Foto de Perfil -->
+			                        <div class="col-md-4">
+			                            <div class="card shadow-sm">
+			                                <div class="card-header bg-primary text-white">
+			                                    <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Foto de Perfil</h5>
+			                                </div>
+			                                <div class="card-body text-center">
+			                                    <div id="fotoPerfilContainer" class="mb-3">
+			                                        <?php if ($foto_perfil && file_exists(__DIR__ . '/' . $foto_perfil)): ?>
+			                                            <img src="<?php echo htmlspecialchars($foto_perfil) ?>" alt="Foto de perfil" class="img-fluid rounded-circle" style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #0d6efd;">
+			                                        <?php else: ?>
                                             <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 200px; height: 200px; font-size: 80px;">
                                                 <i class="bi bi-person-fill"></i>
                                             </div>
@@ -778,30 +835,30 @@
                                             <div class="col-md-6">
                                                 <label class="form-label fw-bold">Email: <span class="text-danger">*</span></label>
                                                 <input type="email"
-                                                       class="form-control campo-editable"
-                                                       id="inputEmail"
-                                                       name="email"
-                                                       value="<?php echo htmlspecialchars($usuario['email']) ?>"
-                                                       readonly
-                                                       required>
+                                                    class="form-control campo-editable"
+                                                    id="inputEmail"
+                                                    name="email"
+                                                    value="<?php echo htmlspecialchars($usuario['email']) ?>"
+                                                    readonly
+                                                    required>
                                                 <small class="text-muted">Usado para iniciar sesión</small>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label fw-bold">Teléfono:</label>
                                                 <input type="tel"
-                                                       class="form-control campo-editable"
-                                                       id="inputTelefono"
-                                                       name="telf"
-                                                       value="<?php echo htmlspecialchars($usuario['telf'] ?? '') ?>"
-                                                       placeholder="Ej: 600123456"
-                                                       pattern="[0-9]{9,15}"
-                                                       readonly>
+                                                    class="form-control campo-editable"
+                                                    id="inputTelefono"
+                                                    name="telf"
+                                                    value="<?php echo htmlspecialchars($usuario['telf'] ?? '') ?>"
+                                                    placeholder="Ej: 600123456"
+                                                    pattern="[0-9]{9,15}"
+                                                    readonly>
                                                 <small class="text-muted">9-15 dígitos</small>
                                             </div>
                                         </div>
 
-                                        <div class="d-grid gap-2" id="botonesEdicion" style="display: none;">
-                                            <div class="row">
+                                        <div id="botonesEdicion" class="d-none">
+                                            <div class="row gap-2">
                                                 <div class="col-md-6">
                                                     <button type="submit" class="btn btn-success w-100">
                                                         <i class="bi bi-check-circle"></i> Guardar Cambios
@@ -935,12 +992,15 @@
             div.style.display = select.value === 'si' ? 'block' : 'none';
         }
 
+        // Variables para control de camas y habitación
+        let camasDisponiblesMax = 0;
+        let numeroCamasActual = 1;
+
         // Funciones para disponibilidad y validación
         function actualizarDisponibilidad() {
             const fechaInicio = document.getElementById('fecha_inicio').value;
             const fechaFin = document.getElementById('fecha_fin').value;
             const selectHabitacion = document.getElementById('selectHabitacion');
-            const selectNumeroCamas = document.getElementById('selectNumeroCamas');
 
             if (fechaInicio && fechaFin) {
                 // Validar que fecha_fin sea posterior a fecha_inicio
@@ -953,8 +1013,14 @@
                     .then(response => response.json())
                     .then(data => {
                         selectHabitacion.innerHTML = '<option value="">Seleccione una habitación</option>';
-                        selectNumeroCamas.innerHTML = '<option value="">Seleccione habitación</option>';
-                        selectNumeroCamas.disabled = true;
+
+                        // Resetear botones de camas
+                        document.getElementById('btnDecrementar').disabled = true;
+                        document.getElementById('btnIncrementar').disabled = true;
+                        document.getElementById('displayNumeroCamas').value = '1';
+                        document.getElementById('numeroCamasInput').value = '1';
+                        numeroCamasActual = 1;
+                        camasDisponiblesMax = 0;
 
                         if (data && data.length > 0) {
                             data.forEach(hab => {
@@ -971,48 +1037,85 @@
             }
         }
 
-        function validarNumeroCamas() {
+        function habilitarSelectorCamas() {
             const selectHabitacion = document.getElementById('selectHabitacion');
-            const selectNumeroCamas = document.getElementById('selectNumeroCamas');
             const selectedOption = selectHabitacion.options[selectHabitacion.selectedIndex];
+            const btnDecrementar = document.getElementById('btnDecrementar');
+            const btnIncrementar = document.getElementById('btnIncrementar');
 
             if (selectHabitacion.value) {
-                const camasDisponibles = parseInt(selectedOption.dataset.camas) || 0;
-                selectNumeroCamas.innerHTML = '<option value="">Seleccione número de camas</option>';
+                camasDisponiblesMax = parseInt(selectedOption.dataset.camas) || 0;
+                numeroCamasActual = 1;
 
-                for (let i = 1; i <= Math.min(camasDisponibles, 3); i++) {
-                    const texto = i === 1 ? '1 cama (solo tú)' :
-                                  i === 2 ? '2 camas (tú + 1 acompañante)' :
-                                           '3 camas (tú + 2 acompañantes)';
-                    selectNumeroCamas.innerHTML += `<option value="${i}">${texto}</option>`;
-                }
-                selectNumeroCamas.disabled = false;
+                // Actualizar display
+                document.getElementById('displayNumeroCamas').value = '1';
+                document.getElementById('numeroCamasInput').value = '1';
+
+                // Habilitar botones
+                btnDecrementar.disabled = true; // Ya está en 1
+                btnIncrementar.disabled = camasDisponiblesMax <= 1;
+
+                // Actualizar info
+                actualizarInfoAcompanantes();
+
+                // Resetear acompañantes
+                document.getElementById('cardAcompanantes').style.display = 'none';
+                document.getElementById('acompanantesContainer').innerHTML = '';
+                acompanantesActuales = 0;
             } else {
-                selectNumeroCamas.innerHTML = '<option value="">Seleccione habitación</option>';
-                selectNumeroCamas.disabled = true;
+                btnDecrementar.disabled = true;
+                btnIncrementar.disabled = true;
+                document.getElementById('infoAcompanantes').innerHTML = 'Selecciona una habitación para elegir el número de camas';
             }
+        }
 
-            // Resetear acompañantes
-            document.getElementById('cardAcompanantes').style.display = 'none';
-            document.getElementById('acompanantesContainer').innerHTML = '';
-            acompanantesActuales = 0;
+        function cambiarNumeroCamas(incremento) {
+            const nuevoValor = numeroCamasActual + incremento;
+
+            if (nuevoValor >= 1 && nuevoValor <= camasDisponiblesMax) {
+                numeroCamasActual = nuevoValor;
+
+                // Actualizar displays
+                document.getElementById('displayNumeroCamas').value = numeroCamasActual;
+                document.getElementById('numeroCamasInput').value = numeroCamasActual;
+
+                // Actualizar botones
+                document.getElementById('btnDecrementar').disabled = numeroCamasActual <= 1;
+                document.getElementById('btnIncrementar').disabled = numeroCamasActual >= camasDisponiblesMax;
+
+                // Actualizar info y acompañantes
+                actualizarInfoAcompanantes();
+                actualizarAcompanantes();
+            }
+        }
+
+        function actualizarInfoAcompanantes() {
+            const infoElement = document.getElementById('infoAcompanantes');
+            const acompanantesRequeridos = numeroCamasActual - 1;
+
+            if (numeroCamasActual === 1) {
+                infoElement.innerHTML = '<i class="bi bi-info-circle"></i> Solo para ti (sin acompañantes)';
+                infoElement.className = 'text-muted mt-2 d-block';
+            } else {
+                infoElement.innerHTML = `<i class="bi bi-exclamation-circle"></i> Debes agregar <strong>${acompanantesRequeridos} acompañante(s)</strong>`;
+                infoElement.className = 'text-warning mt-2 d-block';
+            }
         }
 
         function actualizarAcompanantes() {
-            const numeroCamas = parseInt(document.getElementById('selectNumeroCamas').value) || 0;
             const cardAcompanantes = document.getElementById('cardAcompanantes');
             const container = document.getElementById('acompanantesContainer');
             const badge = document.getElementById('acompanantesRequeridos');
             const btnAgregar = document.getElementById('btnAgregarAcompanante');
 
-            acompanantesRequeridos = numeroCamas - 1; // 1 cama = 0, 2 camas = 1, 3 camas = 2
+            acompanantesRequeridos = numeroCamasActual - 1;
 
-            if (numeroCamas === 1) {
+            if (numeroCamasActual === 1) {
                 // Sin acompañantes
                 cardAcompanantes.style.display = 'none';
                 container.innerHTML = '';
                 acompanantesActuales = 0;
-            } else if (numeroCamas > 1) {
+            } else {
                 // Mostrar sección de acompañantes
                 cardAcompanantes.style.display = 'block';
                 badge.textContent = `${acompanantesRequeridos} requerido(s)`;
@@ -1035,21 +1138,21 @@
                     mostrarMensajeFoto('Subiendo foto...', 'info');
 
                     fetch('subir_foto.php', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.exito) {
-                            mostrarMensajeFoto(data.mensaje, 'success');
-                            setTimeout(() => location.reload(), 1000);
-                        } else {
-                            mostrarMensajeFoto(data.mensaje, 'danger');
-                        }
-                    })
-                    .catch(error => {
-                        mostrarMensajeFoto('Error al subir la foto', 'danger');
-                    });
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.exito) {
+                                mostrarMensajeFoto(data.mensaje, 'success');
+                                setTimeout(() => location.reload(), 1000);
+                            } else {
+                                mostrarMensajeFoto(data.mensaje, 'danger');
+                            }
+                        })
+                        .catch(error => {
+                            mostrarMensajeFoto('Error al subir la foto', 'danger');
+                        });
                 }
             });
         }
@@ -1065,21 +1168,21 @@
             mostrarMensajeFoto('Eliminando foto...', 'info');
 
             fetch('subir_foto.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.exito) {
-                    mostrarMensajeFoto(data.mensaje, 'success');
-                    setTimeout(() => location.reload(), 1000);
-                } else {
-                    mostrarMensajeFoto(data.mensaje, 'danger');
-                }
-            })
-            .catch(error => {
-                mostrarMensajeFoto('Error al eliminar la foto', 'danger');
-            });
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exito) {
+                        mostrarMensajeFoto(data.mensaje, 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        mostrarMensajeFoto(data.mensaje, 'danger');
+                    }
+                })
+                .catch(error => {
+                    mostrarMensajeFoto('Error al eliminar la foto', 'danger');
+                });
         }
 
         function mostrarMensajeFoto(mensaje, tipo) {
@@ -1111,9 +1214,9 @@
             inputTelefono.classList.add('border-primary');
             inputEmail.focus();
 
-            // Mostrar/ocultar botones
-            btnEditar.style.display = 'none';
-            botonesEdicion.style.display = 'block';
+            // Mostrar/ocultar botones usando clases de Bootstrap
+            btnEditar.classList.add('d-none');
+            botonesEdicion.classList.remove('d-none');
         }
 
         function cancelarEdicion() {
@@ -1132,9 +1235,9 @@
             inputEmail.classList.remove('border-primary');
             inputTelefono.classList.remove('border-primary');
 
-            // Mostrar/ocultar botones
-            btnEditar.style.display = 'block';
-            botonesEdicion.style.display = 'none';
+            // Mostrar/ocultar botones usando clases de Bootstrap
+            btnEditar.classList.remove('d-none');
+            botonesEdicion.classList.add('d-none');
         }
 
         // Función para confirmar anulación de reserva
@@ -1143,6 +1246,5 @@
         }
     </script>
 </body>
+
 </html>
-
-

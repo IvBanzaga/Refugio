@@ -257,6 +257,29 @@ function contar_camas_libres_por_fecha($conexion, $fecha)
 }
 
 /**
+ * Obtener todas las habitaciones
+ * @param PDO $conexion
+ * @return array
+ */
+function obtener_todas_habitaciones($conexion)
+{
+    try {
+        $stmt = $conexion->prepare("
+            SELECT h.id, h.numero, h.capacidad, COUNT(c.id) as total_camas
+            FROM habitaciones h
+            LEFT JOIN camas c ON h.id = c.id_habitacion
+            GROUP BY h.id, h.numero, h.capacidad
+            ORDER BY h.numero
+        ");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al obtener habitaciones: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
  * Obtener habitaciones disponibles con número de camas libres para un período
  * @param PDO $conexion
  * @param string $fecha_inicio
@@ -312,12 +335,12 @@ function listar_reservas($conexion, $filtros = [])
     try {
         $sql = "
             SELECT r.id, r.fecha_inicio, r.fecha_fin, r.estado, r.fecha_creacion,
-                   r.id_habitacion, r.numero_camas,
+                   r.id_habitacion, r.numero_camas, r.observaciones,
                    u.nombre, u.apellido1, u.apellido2, u.num_socio, u.email,
                    h.numero as habitacion_numero,
                    GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas_numeros
             FROM reservas r
-            JOIN usuarios u ON r.id_usuario = u.id
+            LEFT JOIN usuarios u ON r.id_usuario = u.id
             JOIN habitaciones h ON r.id_habitacion = h.id
             LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
             LEFT JOIN camas c ON rc.id_cama = c.id
@@ -412,8 +435,8 @@ function crear_reserva($conexion, $datos)
 
         // Validar número de camas
         $numero_camas = isset($datos['numero_camas']) ? (int) $datos['numero_camas'] : 1;
-        if ($numero_camas < 1 || $numero_camas > 3) {
-            throw new Exception("El número de camas debe ser entre 1 y 3");
+        if ($numero_camas < 1) {
+            throw new Exception("Debes reservar al menos 1 cama");
         }
 
         // Buscar camas disponibles en la habitación
@@ -486,6 +509,98 @@ function crear_reserva($conexion, $datos)
     } catch (Exception $e) {
         $conexion->rollBack();
         error_log("Error al crear reserva: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Crear reserva especial (solo admin) para eventos
+ * @param PDO $conexion
+ * @param array $datos (motivo, fecha_inicio, fecha_fin, id_habitacion, numero_camas)
+ * @return int|false ID de la reserva creada o false
+ */
+function crear_reserva_especial_admin($conexion, $datos)
+{
+    try {
+        $conexion->beginTransaction();
+
+        // Validar número de camas
+        $numero_camas = (int) $datos['numero_camas'];
+        if ($numero_camas < 1) {
+            throw new Exception("Debes reservar al menos 1 cama");
+        }
+
+        // Buscar camas disponibles en la habitación
+        $stmt = $conexion->prepare("
+            SELECT id FROM camas
+            WHERE id_habitacion = :id_habitacion
+            AND estado = 'libre'
+            AND id NOT IN (
+                SELECT DISTINCT c.id
+                FROM camas c
+                INNER JOIN reservas_camas rc ON c.id = rc.id_cama
+                INNER JOIN reservas r ON rc.id_reserva = r.id
+                WHERE c.id_habitacion = :id_habitacion
+                AND r.estado IN ('pendiente', 'reservada')
+                AND (
+                    (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+                )
+            )
+            ORDER BY numero
+            LIMIT :numero_camas
+        ");
+
+        $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+        $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $camas_disponibles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (count($camas_disponibles) < $numero_camas) {
+            throw new Exception("No hay suficientes camas disponibles en esta habitación");
+        }
+
+        // Insertar reserva especial (id_usuario = NULL, estado = 'reservada' directamente)
+        $stmt = $conexion->prepare("
+            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado, observaciones)
+            VALUES (NULL, :id_habitacion, :numero_camas, :fecha_inicio, :fecha_fin, 'reservada', :motivo)
+        ");
+
+        $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+        $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt->bindParam(':motivo', $datos['motivo']);
+
+        $stmt->execute();
+        $id_reserva = $conexion->lastInsertId();
+
+        // Crear relación entre reserva y camas asignadas
+        $stmt_cama = $conexion->prepare("
+            INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)
+        ");
+
+        // Actualizar estado de las camas asignadas
+        $stmt_update = $conexion->prepare("UPDATE camas SET estado = 'reservada' WHERE id = :id_cama");
+
+        foreach ($camas_disponibles as $id_cama) {
+            // Crear relación
+            $stmt_cama->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+            $stmt_cama->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+            $stmt_cama->execute();
+
+            // Actualizar estado de la cama
+            $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+            $stmt_update->execute();
+        }
+
+        $conexion->commit();
+        return $id_reserva;
+    } catch (Exception $e) {
+        $conexion->rollBack();
+        error_log("Error al crear reserva especial: " . $e->getMessage());
         return false;
     }
 }

@@ -97,6 +97,34 @@
                 }
                 $accion = 'reservas';
                 break;
+
+            case 'crear_reserva_especial':
+                $datos = [
+                    'motivo'        => sanitize_input($_POST['motivo']),
+                    'fecha_inicio'  => sanitize_input($_POST['fecha_inicio']),
+                    'fecha_fin'     => sanitize_input($_POST['fecha_fin']),
+                    'id_habitacion' => (int) $_POST['id_habitacion'],
+                    'numero_camas'  => (int) $_POST['numero_camas'],
+                ];
+
+                // Validar fechas
+                if ($datos['fecha_inicio'] >= $datos['fecha_fin']) {
+                    $mensaje      = "La fecha de inicio debe ser anterior a la fecha de fin";
+                    $tipo_mensaje = 'danger';
+                } elseif ($datos['numero_camas'] < 1) {
+                    $mensaje      = "Debe seleccionar al menos 1 cama";
+                    $tipo_mensaje = 'danger';
+                } else {
+                    // Crear reserva especial (sin usuario asociado, estado 'reservada' directamente)
+                    if (crear_reserva_especial_admin($conexionPDO, $datos)) {
+                        $mensaje = "Reserva especial creada exitosamente: " . htmlspecialchars($datos['motivo']);
+                    } else {
+                        $mensaje      = "Error al crear la reserva especial. Verifica que haya camas disponibles.";
+                        $tipo_mensaje = 'danger';
+                    }
+                }
+                $accion = 'reservas';
+                break;
         }
     }
 
@@ -323,13 +351,13 @@
                     </div>
                 </div>
                 <nav class="nav flex-column mt-3">
-                    <a class="nav-link                                       <?php echo $accion === 'dashboard' ? 'active' : '' ?>" href="?accion=dashboard">
+                    <a class="nav-link                                                                                                                                                         <?php echo $accion === 'dashboard' ? 'active' : '' ?>" href="?accion=dashboard">
                         <i class="bi bi-speedometer2"></i> Dashboard
                     </a>
-                    <a class="nav-link                                       <?php echo $accion === 'usuarios' || $accion === 'editar_usuario' ? 'active' : '' ?>" href="?accion=usuarios">
+                    <a class="nav-link                                                                                                                                                         <?php echo $accion === 'usuarios' || $accion === 'editar_usuario' ? 'active' : '' ?>" href="?accion=usuarios">
                         <i class="bi bi-people-fill"></i> Usuarios
                     </a>
-                    <a class="nav-link                                       <?php echo $accion === 'reservas' ? 'active' : '' ?>" href="?accion=reservas">
+                    <a class="nav-link                                                                                                                                                         <?php echo $accion === 'reservas' ? 'active' : '' ?>" href="?accion=reservas">
                         <i class="bi bi-calendar-check"></i> Reservas
                     </a>
                     <hr class="text-white">
@@ -526,7 +554,7 @@
                                             <tr>
                                                 <th>Solicitante</th>
                                                 <th>Habitación</th>
-                                                <th>Cama</th>
+                                                <th>Camas</th>
                                                 <th>Fecha Entrada</th>
                                                 <th>Fecha Salida</th>
                                                 <th>Solicitado</th>
@@ -541,7 +569,7 @@
                                                         <small class="text-muted"><?php echo htmlspecialchars($reserva['email']) ?></small>
                                                     </td>
                                                     <td><?php echo $reserva['habitacion_numero'] ?></td>
-                                                    <td><?php echo $reserva['cama_numero'] ?></td>
+                                                    <td><?php echo $reserva['camas_numeros'] ?? $reserva['numero_camas'] . ' camas' ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                     <td><?php echo date('d/m/Y H:i', strtotime($reserva['fecha_creacion'])) ?></td>
@@ -583,7 +611,7 @@
                                     <div class="col-md-6 mb-3">
                                         <div class="card">
                                             <div class="card-body">
-                                                <h6>Habitación                                                                <?php echo $hab['numero'] ?></h6>
+                                                <h6>Habitación                                                                                                                                                                                                                                                             <?php echo $hab['numero'] ?></h6>
                                                 <div class="progress mb-2">
                                                     <?php
                                                         $porcentaje = ($hab['camas_libres'] / $hab['total_camas']) * 100;
@@ -720,7 +748,7 @@
 
                                         <div class="row">
                                             <div class="col-md-6 mb-3">
-                                                <label class="form-label">Contraseña                                                                                      <?php echo $usuario_editar ? '' : '*' ?></label>
+                                                <label class="form-label">Contraseña                                                                                                                                                                                                                                                                                                                                                     <?php echo $usuario_editar ? '' : '*' ?></label>
                                                 <input type="password" name="password" class="form-control"
                                                        <?php echo $usuario_editar ? '' : 'required' ?>>
                                                 <?php if ($usuario_editar): ?>
@@ -730,8 +758,8 @@
                                             <div class="col-md-6 mb-3">
                                                 <label class="form-label">Rol *</label>
                                                 <select name="rol" class="form-select" required>
-                                                    <option value="user"                                                                         <?php echo($usuario_editar && $usuario_editar['rol'] === 'user') ? 'selected' : '' ?>>User</option>
-                                                    <option value="admin"                                                                          <?php echo($usuario_editar && $usuario_editar['rol'] === 'admin') ? 'selected' : '' ?>>Admin</option>
+                                                    <option value="user"                                                                                                                                                                                                                                                                                                 <?php echo($usuario_editar && $usuario_editar['rol'] === 'user') ? 'selected' : '' ?>>User</option>
+                                                    <option value="admin"                                                                                                                                                                                                                                                                                                     <?php echo($usuario_editar && $usuario_editar['rol'] === 'admin') ? 'selected' : '' ?>>Admin</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -757,7 +785,12 @@
 
                 <?php elseif ($accion === 'reservas'): ?>
                     <!-- Gestión de Reservas -->
-                    <h2 class="mb-4"><i class="bi bi-calendar-check"></i> Gestión de Reservas</h2>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2><i class="bi bi-calendar-check"></i> Gestión de Reservas</h2>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservaEspecial">
+                            <i class="bi bi-plus-circle"></i> Crear Reserva Especial
+                        </button>
+                    </div>
 
                     <!-- Reservas Pendientes -->
                     <div class="card shadow-sm mb-4">
@@ -773,7 +806,7 @@
                                                 <th>ID</th>
                                                 <th>Usuario</th>
                                                 <th>Habitación</th>
-                                                <th>Cama</th>
+                                                <th>Camas</th>
                                                 <th>Entrada</th>
                                                 <th>Salida</th>
                                                 <th>Días</th>
@@ -782,39 +815,45 @@
                                         </thead>
                                         <tbody>
                                             <?php foreach ($reservas_pendientes as $reserva):
-                                                    $dias = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
+                                                    $dias        = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
+                                                    $es_especial = empty($reserva['nombre']); // Si no hay usuario, es reserva especial
                                                 ?>
-		                                                <tr>
-		                                                    <td><?php echo $reserva['id'] ?></td>
-		                                                    <td>
-		                                                        <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
-		                                                        <small class="text-muted"><?php echo htmlspecialchars($reserva['num_socio']) ?></small>
-		                                                    </td>
-		                                                    <td>Hab.		                                                             <?php echo $reserva['habitacion_numero'] ?></td>
-		                                                    <td>Cama		                                                             <?php echo $reserva['cama_numero'] ?></td>
-		                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-		                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-		                                                    <td><?php echo $dias ?> días</td>
-		                                                    <td>
-		                                                        <div class="btn-group" role="group">
-		                                                            <form method="post" class="d-inline">
-		                                                                <input type="hidden" name="accion" value="aprobar_reserva">
-		                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-		                                                                <button type="submit" class="btn btn-sm btn-success">
-		                                                                    <i class="bi bi-check-lg"></i> Aprobar
-		                                                                </button>
-		                                                            </form>
-		                                                            <form method="post" class="d-inline">
-		                                                                <input type="hidden" name="accion" value="rechazar_reserva">
-		                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-		                                                                <button type="submit" class="btn btn-sm btn-danger">
-		                                                                    <i class="bi bi-x-lg"></i> Rechazar
-		                                                                </button>
-		                                                            </form>
-		                                                        </div>
-		                                                    </td>
-		                                                </tr>
-		                                            <?php endforeach; ?>
+					                                                <tr>
+					                                                    <td><?php echo $reserva['id'] ?></td>
+					                                                    <td>
+					                                                        <?php if ($es_especial): ?>
+					                                                            <strong class="text-primary"><i class="bi bi-calendar-event"></i> RESERVA ESPECIAL</strong><br>
+					                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['observaciones']) ?></small>
+					                                                        <?php else: ?>
+				                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
+				                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['num_socio']) ?></small>
+				                                                        <?php endif; ?>
+				                                                    </td>
+				                                                    <td>Hab.				                                                            				                                                            			                                                            		                                                             <?php echo $reserva['habitacion_numero'] ?></td>
+				                                                    <td>Cama				                                                            				                                                            			                                                            		                                                             <?php echo $reserva['camas_numeros'] ?? $reserva['numero_camas'] . ' camas' ?></td>
+				                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+				                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+				                                                    <td><?php echo $dias ?> días</td>
+				                                                    <td>
+				                                                        <div class="btn-group" role="group">
+				                                                            <form method="post" class="d-inline">
+				                                                                <input type="hidden" name="accion" value="aprobar_reserva">
+				                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
+				                                                                <button type="submit" class="btn btn-sm btn-success">
+				                                                                    <i class="bi bi-check-lg"></i> Aprobar
+				                                                                </button>
+				                                                            </form>
+				                                                            <form method="post" class="d-inline">
+				                                                                <input type="hidden" name="accion" value="rechazar_reserva">
+				                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
+				                                                                <button type="submit" class="btn btn-sm btn-danger">
+				                                                                    <i class="bi bi-x-lg"></i> Rechazar
+				                                                                </button>
+				                                                            </form>
+				                                                        </div>
+				                                                    </td>
+				                                                </tr>
+				                                            <?php endforeach; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -838,7 +877,7 @@
                                                 <th>ID</th>
                                                 <th>Usuario</th>
                                                 <th>Habitación</th>
-                                                <th>Cama</th>
+                                                <th>Camas</th>
                                                 <th>Entrada</th>
                                                 <th>Salida</th>
                                                 <th>Días</th>
@@ -846,21 +885,27 @@
                                         </thead>
                                         <tbody>
                                             <?php foreach ($reservas_aprobadas as $reserva):
-                                                    $dias = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
+                                                    $dias        = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
+                                                    $es_especial = empty($reserva['nombre']); // Si no hay usuario, es reserva especial
                                                 ?>
-		                                                <tr>
-		                                                    <td><?php echo $reserva['id'] ?></td>
-		                                                    <td>
-		                                                        <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
-		                                                        <small class="text-muted"><?php echo htmlspecialchars($reserva['num_socio']) ?></small>
-		                                                    </td>
-		                                                    <td>Hab.		                                                             <?php echo $reserva['habitacion_numero'] ?></td>
-		                                                    <td>Cama		                                                             <?php echo $reserva['cama_numero'] ?></td>
-		                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-		                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-		                                                    <td><?php echo $dias ?> días</td>
-		                                                </tr>
-		                                            <?php endforeach; ?>
+					                                                <tr>
+					                                                    <td><?php echo $reserva['id'] ?></td>
+					                                                    <td>
+					                                                        <?php if ($es_especial): ?>
+					                                                            <strong class="text-primary"><i class="bi bi-calendar-event"></i> RESERVA ESPECIAL</strong><br>
+					                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['observaciones']) ?></small>
+					                                                        <?php else: ?>
+				                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
+				                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['num_socio']) ?></small>
+				                                                        <?php endif; ?>
+				                                                    </td>
+				                                                    <td>Hab.				                                                            				                                                            			                                                            		                                                             <?php echo $reserva['habitacion_numero'] ?></td>
+				                                                    <td>Cama				                                                            				                                                            			                                                            		                                                             <?php echo $reserva['camas_numeros'] ?? $reserva['numero_camas'] . ' camas' ?></td>
+				                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+				                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+				                                                    <td><?php echo $dias ?> días</td>
+				                                                </tr>
+				                                            <?php endforeach; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -873,6 +918,128 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal para Crear Reserva Especial -->
+    <div class="modal fade" id="modalReservaEspecial" tabindex="-1" aria-labelledby="modalReservaEspecialLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalReservaEspecialLabel">
+                        <i class="bi bi-calendar-event"></i> Crear Reserva Especial
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" id="formReservaEspecial">
+                    <input type="hidden" name="accion" value="crear_reserva_especial">
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Las reservas especiales son para eventos y se aprueban automáticamente.
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Motivo/Evento *</label>
+                            <input type="text" class="form-control" name="motivo" required
+                                   placeholder="Ej: Evento especial, Mantenimiento, etc.">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Fecha Inicio *</label>
+                                <input type="date" class="form-control" name="fecha_inicio" required
+                                       id="fechaInicioEspecial" min="<?php echo date('Y-m-d'); ?>">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Fecha Fin *</label>
+                                <input type="date" class="form-control" name="fecha_fin" required
+                                       id="fechaFinEspecial" min="<?php echo date('Y-m-d'); ?>">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Habitación *</label>
+                            <select class="form-select" name="id_habitacion" required id="selectHabitacionEspecial">
+                                <option value="">Seleccione una habitación</option>
+                                <?php
+                                    $habitaciones = obtener_todas_habitaciones($conexionPDO);
+                                    foreach ($habitaciones as $hab):
+                                ?>
+                                    <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
+                                        Habitación                                                                                                       <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Número de Camas *</label>
+                            <div class="input-group">
+                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasEspecial(-1)">
+                                    <i class="bi bi-dash"></i>
+                                </button>
+                                <input type="number" class="form-control text-center" name="numero_camas"
+                                       id="numeroCamasEspecial" value="1" min="1" required readonly>
+                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasEspecial(1)">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted" id="infoCamasEspecial">Selecciona una habitación primero</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Crear Reserva
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Control de número de camas para reserva especial
+        let maxCamasEspecial = 1;
+
+        document.getElementById('selectHabitacionEspecial').addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            maxCamasEspecial = parseInt(selectedOption.dataset.maxCamas) || 1;
+            document.getElementById('numeroCamasEspecial').max = maxCamasEspecial;
+            document.getElementById('numeroCamasEspecial').value = 1;
+            document.getElementById('infoCamasEspecial').textContent =
+                `Máximo ${maxCamasEspecial} camas disponibles en esta habitación`;
+        });
+
+        function cambiarCamasEspecial(cambio) {
+            const input = document.getElementById('numeroCamasEspecial');
+            const habitacionSelect = document.getElementById('selectHabitacionEspecial');
+
+            if (!habitacionSelect.value) {
+                alert('Primero selecciona una habitación');
+                return;
+            }
+
+            let nuevoValor = parseInt(input.value) + cambio;
+
+            if (nuevoValor < 1) {
+                nuevoValor = 1;
+            } else if (nuevoValor > maxCamasEspecial) {
+                nuevoValor = maxCamasEspecial;
+            }
+
+            input.value = nuevoValor;
+        }
+
+        // Validar que fecha fin sea posterior a fecha inicio
+        document.getElementById('fechaFinEspecial').addEventListener('change', function() {
+            const fechaInicio = document.getElementById('fechaInicioEspecial').value;
+            const fechaFin = this.value;
+
+            if (fechaInicio && fechaFin && fechaFin <= fechaInicio) {
+                alert('La fecha de fin debe ser posterior a la fecha de inicio');
+                this.value = '';
+            }
+        });
+    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>

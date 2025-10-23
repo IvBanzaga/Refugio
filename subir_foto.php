@@ -3,12 +3,12 @@ require_once 'conexion.php';
 require_once 'functions.php';
 
 // Verificar sesión
-if (! isset($_SESSION['user_id'])) {
+if (! isset($_SESSION['userId'])) {
     echo json_encode(['exito' => false, 'mensaje' => 'No autorizado']);
     exit;
 }
 
-$id_usuario = $_SESSION['user_id'];
+$id_usuario = $_SESSION['userId'];
 
 // Procesar según la acción
 $accion = $_POST['accion'] ?? '';
