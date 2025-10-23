@@ -338,16 +338,16 @@
                     </div>
                 </div>
                 <nav class="nav flex-column mt-3">
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $accion === 'calendario' ? 'active' : '' ?>" href="?accion=calendario">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $accion === 'calendario' ? 'active' : '' ?>" href="?accion=calendario">
                         <i class="bi bi-calendar3"></i> Calendario
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $accion === 'nueva_reserva' ? 'active' : '' ?>" href="?accion=nueva_reserva">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $accion === 'nueva_reserva' ? 'active' : '' ?>" href="?accion=nueva_reserva">
                         <i class="bi bi-plus-circle-fill"></i> Nueva Reserva
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $accion === 'mis_reservas' ? 'active' : '' ?>" href="?accion=mis_reservas">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $accion === 'mis_reservas' ? 'active' : '' ?>" href="?accion=mis_reservas">
                         <i class="bi bi-list-check"></i> Mis Reservas
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $accion === 'perfil' ? 'active' : '' ?>" href="?accion=perfil">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $accion === 'perfil' ? 'active' : '' ?>" href="?accion=perfil">
                         <i class="bi bi-person-circle"></i> Mi Perfil
                     </a>
                     <hr class="text-white">
@@ -425,14 +425,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-											                                            SELECT r.id, r.estado, h.numero as habitacion, c.numero as cama
-											                                            FROM reservas r
-											                                            JOIN camas c ON r.id_cama = c.id
-											                                            JOIN habitaciones h ON c.id_habitacion = h.id
-											                                            WHERE r.id_usuario = :id_usuario
-											                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-											                                            AND r.estado IN ('pendiente', 'reservada')
-											                                        ");
+												                                            SELECT r.id, r.estado, h.numero as habitacion,
+												                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+												                                            FROM reservas r
+												                                            JOIN habitaciones h ON r.id_habitacion = h.id
+												                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+												                                            LEFT JOIN camas c ON rc.id_cama = c.id
+												                                            WHERE r.id_usuario = :id_usuario
+												                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+												                                            AND r.estado IN ('pendiente', 'reservada')
+												                                            GROUP BY r.id, r.estado, h.numero
+												                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -440,11 +443,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-											                                            SELECT COUNT(*) as total
-											                                            FROM reservas
-											                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-											                                            AND estado = 'reservada'
-											                                        ");
+												                                            SELECT COUNT(*) as total
+												                                            FROM reservas
+												                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+												                                            AND estado = 'reservada'
+												                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -463,10 +466,10 @@
                                         // Usuario tiene reserva en esta fecha
                                         if ($mi_reserva['estado'] === 'reservada') {
                                             $clase .= ' mi-reserva-aprobada';
-                                            $info_extra = "Hab. {$mi_reserva['habitacion']}, Cama {$mi_reserva['cama']}";
+                                            $info_extra = "Hab. {$mi_reserva['habitacion']}, Camas {$mi_reserva['camas']}";
                                         } else {
                                             $clase .= ' mi-reserva-pendiente';
-                                            $info_extra = "Pendiente - Hab. {$mi_reserva['habitacion']}, Cama {$mi_reserva['cama']}";
+                                            $info_extra = "Pendiente - Hab. {$mi_reserva['habitacion']}, Camas {$mi_reserva['camas']}";
                                         }
                                     } elseif ($camas_libres === 0) {
                                         $clase .= ' lleno';
@@ -629,7 +632,7 @@
                                         <tbody>
                                             <?php foreach ($pendientes as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                                                                                     <?php echo $reserva['habitacion_numero'] ?></td>
+                                                    <td>Hab.                                                                                                                                                                                                                                                 <?php echo $reserva['habitacion_numero'] ?></td>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -681,23 +684,23 @@
                                             <?php foreach ($aprobadas as $reserva):
                                                     $dias = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
                                                 ?>
-			                                                <tr>
-			                                                    <td>Hab.			                                                            		                                                            	                                                             <?php echo $reserva['habitacion_numero'] ?></td>
-			                                                    <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
-			                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-			                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-			                                                    <td><?php echo $dias ?> día<?php echo $dias > 1 ? 's' : '' ?></td>
-			                                                    <td>
-			                                                        <form method="post" class="d-inline" onsubmit="return confirmarAnulacion()">
-			                                                            <input type="hidden" name="accion" value="cancelar_reserva">
-			                                                            <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-			                                                            <button type="submit" class="btn btn-sm btn-danger">
-			                                                                <i class="bi bi-x-circle"></i> Anular
-			                                                            </button>
-			                                                        </form>
-			                                                    </td>
-			                                                </tr>
-			                                            <?php endforeach; ?>
+				                                                <tr>
+				                                                    <td>Hab.				                                                            			                                                            		                                                            	                                                             <?php echo $reserva['habitacion_numero'] ?></td>
+				                                                    <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
+				                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+				                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+				                                                    <td><?php echo $dias ?> día<?php echo $dias > 1 ? 's' : '' ?></td>
+				                                                    <td>
+				                                                        <form method="post" class="d-inline" onsubmit="return confirmarAnulacion()">
+				                                                            <input type="hidden" name="accion" value="cancelar_reserva">
+				                                                            <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
+				                                                            <button type="submit" class="btn btn-sm btn-danger">
+				                                                                <i class="bi bi-x-circle"></i> Anular
+				                                                            </button>
+				                                                        </form>
+				                                                    </td>
+				                                                </tr>
+				                                            <?php endforeach; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -727,7 +730,7 @@
                                         <tbody>
                                             <?php foreach ($canceladas as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                                                                                     <?php echo $reserva['habitacion_numero'] ?></td>
+                                                    <td>Hab.                                                                                                                                                                                                                                                 <?php echo $reserva['habitacion_numero'] ?></td>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -745,21 +748,21 @@
                         $usuario     = obtener_info_usuario($conexionPDO, $_SESSION['userId']);
                         $foto_perfil = $usuario['foto_perfil'] ?? null;
                     ?>
-			                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
-			                    <hr>
+				                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
+				                    <hr>
 
-			                    <div class="row">
-			                        <!-- Foto de Perfil -->
-			                        <div class="col-md-4">
-			                            <div class="card shadow-sm">
-			                                <div class="card-header bg-primary text-white">
-			                                    <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Foto de Perfil</h5>
-			                                </div>
-			                                <div class="card-body text-center">
-			                                    <div id="fotoPerfilContainer" class="mb-3">
-			                                        <?php if ($foto_perfil && file_exists(__DIR__ . '/' . $foto_perfil)): ?>
-			                                            <img src="<?php echo htmlspecialchars($foto_perfil) ?>" alt="Foto de perfil" class="img-fluid rounded-circle" style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #0d6efd;">
-			                                        <?php else: ?>
+				                    <div class="row">
+				                        <!-- Foto de Perfil -->
+				                        <div class="col-md-4">
+				                            <div class="card shadow-sm">
+				                                <div class="card-header bg-primary text-white">
+				                                    <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Foto de Perfil</h5>
+				                                </div>
+				                                <div class="card-body text-center">
+				                                    <div id="fotoPerfilContainer" class="mb-3">
+				                                        <?php if ($foto_perfil && file_exists(__DIR__ . '/' . $foto_perfil)): ?>
+				                                            <img src="<?php echo htmlspecialchars($foto_perfil) ?>" alt="Foto de perfil" class="img-fluid rounded-circle" style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #0d6efd;">
+				                                        <?php else: ?>
                                             <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 200px; height: 200px; font-size: 80px;">
                                                 <i class="bi bi-person-fill"></i>
                                             </div>
