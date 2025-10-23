@@ -518,6 +518,92 @@ function obtener_reserva($conexion, $id)
 }
 
 /**
+ * Crear reserva para un socio (por admin, aprobada automáticamente)
+ * @param PDO $conexion
+ * @param array $datos
+ * @return int|false ID de la reserva creada o false
+ */
+function crear_reserva_para_socio($conexion, $datos)
+{
+    try {
+        $conexion->beginTransaction();
+
+        // Validar número de camas
+        $numero_camas = isset($datos['numero_camas']) ? (int) $datos['numero_camas'] : 1;
+        if ($numero_camas < 1) {
+            throw new Exception("Debes reservar al menos 1 cama");
+        }
+
+        // Buscar camas disponibles en la habitación
+        $stmt = $conexion->prepare("
+            SELECT id FROM camas
+            WHERE id_habitacion = :id_habitacion
+            AND estado = 'libre'
+            AND id NOT IN (
+                SELECT DISTINCT c.id
+                FROM camas c
+                INNER JOIN reservas_camas rc ON c.id = rc.id_cama
+                INNER JOIN reservas r ON rc.id_reserva = r.id
+                WHERE c.id_habitacion = :id_habitacion
+                AND r.estado IN ('pendiente', 'reservada')
+                AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+            )
+            ORDER BY numero
+            LIMIT :numero_camas
+        ");
+
+        $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+        $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $camas_disponibles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (count($camas_disponibles) < $numero_camas) {
+            throw new Exception("No hay suficientes camas disponibles en esta habitación");
+        }
+
+        // Crear reserva con estado 'reservada' (aprobada automáticamente por admin)
+        $stmt = $conexion->prepare("
+            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado)
+            VALUES (:id_usuario, :id_habitacion, :numero_camas, :fecha_inicio, :fecha_fin, 'reservada')
+        ");
+
+        $stmt->bindParam(':id_usuario', $datos['id_usuario'], PDO::PARAM_INT);
+        $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+        $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt->execute();
+
+        $id_reserva = $conexion->lastInsertId();
+
+        // Crear relación entre reserva y camas asignadas
+        $stmt_cama   = $conexion->prepare("INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)");
+        $stmt_update = $conexion->prepare("UPDATE camas SET estado = 'reservada' WHERE id = :id_cama");
+
+        foreach ($camas_disponibles as $id_cama) {
+            // Crear relación
+            $stmt_cama->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+            $stmt_cama->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+            $stmt_cama->execute();
+
+            // Actualizar estado de la cama
+            $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+            $stmt_update->execute();
+        }
+
+        $conexion->commit();
+        return $id_reserva;
+    } catch (Exception $e) {
+        $conexion->rollBack();
+        error_log("Error al crear reserva para socio: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
  * Crear nueva reserva
  * @param PDO $conexion
  * @param array $datos
@@ -857,6 +943,66 @@ function actualizar_estado_reserva($conexion, $id, $estado)
  * @param int $id
  * @return bool
  */
+/**
+ * Editar una reserva de usuario (solo reservas pendientes)
+ * @param PDO $conexion
+ * @param int $id_reserva
+ * @param string $fecha_inicio
+ * @param string $fecha_fin
+ * @param int $id_habitacion
+ * @param int $numero_camas
+ * @return bool
+ */
+function editar_reserva_usuario($conexion, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)
+{
+    try {
+        $conexion->beginTransaction();
+
+        // Actualizar datos básicos de la reserva
+        $stmt = $conexion->prepare("
+            UPDATE reservas
+            SET fecha_inicio = :fecha_inicio,
+                fecha_fin = :fecha_fin,
+                id_habitacion = :id_habitacion,
+                numero_camas = :numero_camas
+            WHERE id = :id
+        ");
+        $stmt->bindParam(':fecha_inicio', $fecha_inicio);
+        $stmt->bindParam(':fecha_fin', $fecha_fin);
+        $stmt->bindParam(':id_habitacion', $id_habitacion, PDO::PARAM_INT);
+        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+        $stmt->bindParam(':id', $id_reserva, PDO::PARAM_INT);
+        $stmt->execute();
+
+        // Eliminar asignaciones anteriores de camas
+        $stmt = $conexion->prepare("DELETE FROM reservas_camas WHERE id_reserva = :id_reserva");
+        $stmt->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+        $stmt->execute();
+
+        // Obtener camas disponibles de la nueva habitación
+        $camas_disponibles = obtener_camas_disponibles($conexion, $id_habitacion, $fecha_inicio, $fecha_fin, $id_reserva);
+
+        if (count($camas_disponibles) < $numero_camas) {
+            throw new Exception("No hay suficientes camas disponibles en la habitación seleccionada");
+        }
+
+        // Asignar nuevas camas
+        $stmt = $conexion->prepare("INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)");
+        for ($i = 0; $i < $numero_camas; $i++) {
+            $stmt->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+            $stmt->bindParam(':id_cama', $camas_disponibles[$i]['id'], PDO::PARAM_INT);
+            $stmt->execute();
+        }
+
+        $conexion->commit();
+        return true;
+    } catch (Exception $e) {
+        $conexion->rollBack();
+        error_log("Error al editar reserva de usuario: " . $e->getMessage());
+        return false;
+    }
+}
+
 /**
  * Editar una reserva (solo admin)
  * @param PDO $conexion

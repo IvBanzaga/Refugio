@@ -92,6 +92,47 @@
                 $accion = 'mis_reservas';
                 break;
 
+            case 'editar_reserva_usuario':
+                try {
+                    $conexionPDO->beginTransaction();
+
+                    $id_reserva    = (int) $_POST['id_reserva'];
+                    $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
+                    $fecha_fin     = sanitize_input($_POST['fecha_fin']);
+                    $id_habitacion = (int) $_POST['id_habitacion'];
+                    $numero_camas  = (int) $_POST['numero_camas'];
+
+                    // Validar que la reserva pertenece al usuario
+                    $reserva_actual = obtener_reserva($conexionPDO, $id_reserva);
+                    if (! $reserva_actual || $reserva_actual['id_usuario'] != $_SESSION['userId']) {
+                        throw new Exception("No tienes permiso para editar esta reserva");
+                    }
+
+                    // Solo se pueden editar reservas pendientes
+                    if ($reserva_actual['estado'] !== 'pendiente') {
+                        throw new Exception("Solo puedes editar reservas pendientes");
+                    }
+
+                    // Validar fechas
+                    if ($fecha_inicio >= $fecha_fin) {
+                        throw new Exception("La fecha de inicio debe ser anterior a la fecha de fin");
+                    }
+
+                    // Editar reserva
+                    if (editar_reserva_usuario($conexionPDO, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)) {
+                        $conexionPDO->commit();
+                        $mensaje = "Reserva actualizada exitosamente";
+                    } else {
+                        throw new Exception("No hay suficientes camas disponibles");
+                    }
+                } catch (Exception $e) {
+                    $conexionPDO->rollBack();
+                    $mensaje      = "Error al editar reserva: " . $e->getMessage();
+                    $tipo_mensaje = 'danger';
+                }
+                $accion = 'mis_reservas';
+                break;
+
             case 'actualizar_perfil':
                 $email = sanitize_input($_POST['email']);
                 $telf  = sanitize_input($_POST['telf']);
@@ -338,16 +379,16 @@
                     </div>
                 </div>
                 <nav class="nav flex-column mt-3">
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $accion === 'calendario' ? 'active' : '' ?>" href="?accion=calendario">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             <?php echo $accion === 'calendario' ? 'active' : '' ?>" href="?accion=calendario">
                         <i class="bi bi-calendar3"></i> Calendario
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $accion === 'nueva_reserva' ? 'active' : '' ?>" href="?accion=nueva_reserva">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             <?php echo $accion === 'nueva_reserva' ? 'active' : '' ?>" href="?accion=nueva_reserva">
                         <i class="bi bi-plus-circle-fill"></i> Nueva Reserva
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $accion === 'mis_reservas' ? 'active' : '' ?>" href="?accion=mis_reservas">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             <?php echo $accion === 'mis_reservas' ? 'active' : '' ?>" href="?accion=mis_reservas">
                         <i class="bi bi-list-check"></i> Mis Reservas
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $accion === 'perfil' ? 'active' : '' ?>" href="?accion=perfil">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             <?php echo $accion === 'perfil' ? 'active' : '' ?>" href="?accion=perfil">
                         <i class="bi bi-person-circle"></i> Mi Perfil
                     </a>
                     <hr class="text-white">
@@ -425,17 +466,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-												                                            SELECT r.id, r.estado, h.numero as habitacion,
-												                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-												                                            FROM reservas r
-												                                            JOIN habitaciones h ON r.id_habitacion = h.id
-												                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-												                                            LEFT JOIN camas c ON rc.id_cama = c.id
-												                                            WHERE r.id_usuario = :id_usuario
-												                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-												                                            AND r.estado IN ('pendiente', 'reservada')
-												                                            GROUP BY r.id, r.estado, h.numero
-												                                        ");
+																                                            SELECT r.id, r.estado, h.numero as habitacion,
+																                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																                                            FROM reservas r
+																                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																                                            WHERE r.id_usuario = :id_usuario
+																                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																                                            AND r.estado IN ('pendiente', 'reservada')
+																                                            GROUP BY r.id, r.estado, h.numero
+																                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -443,11 +484,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-												                                            SELECT COUNT(*) as total
-												                                            FROM reservas
-												                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-												                                            AND estado = 'reservada'
-												                                        ");
+																                                            SELECT COUNT(*) as total
+																                                            FROM reservas
+																                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																                                            AND estado = 'reservada'
+																                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -480,6 +521,9 @@
                                     <div class="<?php echo $clase ?>" data-fecha="<?php echo $fecha ?>"
                                         <?php if ($mi_reserva): ?>
                                         title="<?php echo $info_extra ?>"
+                                        <?php elseif (! $es_pasado && $camas_libres > 0): ?>
+                                        onclick="irAReserva('<?php echo $fecha ?>')" style="cursor: pointer;"
+                                        title="Click para reservar este día"
                                         <?php endif; ?>>
                                         <div class="numero-dia"><?php echo $dia ?></div>
                                         <?php if (! $es_pasado): ?>
@@ -521,12 +565,14 @@
                                         <label class="form-label">Fecha de Entrada *</label>
                                         <input type="date" name="fecha_inicio" id="fecha_inicio" class="form-control"
                                             min="<?php echo date('Y-m-d') ?>" required
+                                            value="<?php echo isset($_GET['fecha_inicio']) ? htmlspecialchars($_GET['fecha_inicio']) : '' ?>"
                                             onchange="actualizarDisponibilidad()">
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label">Fecha de Salida *</label>
                                         <input type="date" name="fecha_fin" id="fecha_fin" class="form-control"
                                             min="<?php echo date('Y-m-d') ?>" required
+                                            value="<?php echo isset($_GET['fecha_fin']) ? htmlspecialchars($_GET['fecha_fin']) : '' ?>"
                                             onchange="actualizarDisponibilidad()">
                                     </div>
                                     <div class="col-md-4">
@@ -632,12 +678,16 @@
                                         <tbody>
                                             <?php foreach ($pendientes as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                                                                                                                                                 <?php echo $reserva['habitacion_numero'] ?></td>
+                                                    <td>Hab.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 <?php echo $reserva['habitacion_numero'] ?></td>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                     <td><?php echo date('d/m/Y H:i', strtotime($reserva['fecha_creacion'])) ?></td>
                                                     <td>
+                                                        <button type="button" class="btn btn-sm btn-primary me-1"
+                                                            onclick="editarReservaUsuario(<?php echo htmlspecialchars(json_encode($reserva)) ?>)">
+                                                            <i class="bi bi-pencil"></i> Editar
+                                                        </button>
                                                         <form method="post" class="d-inline">
                                                             <input type="hidden" name="accion" value="cancelar_reserva">
                                                             <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
@@ -684,23 +734,23 @@
                                             <?php foreach ($aprobadas as $reserva):
                                                     $dias = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
                                                 ?>
-				                                                <tr>
-				                                                    <td>Hab.				                                                            			                                                            		                                                            	                                                             <?php echo $reserva['habitacion_numero'] ?></td>
-				                                                    <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
-				                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-				                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-				                                                    <td><?php echo $dias ?> día<?php echo $dias > 1 ? 's' : '' ?></td>
-				                                                    <td>
-				                                                        <form method="post" class="d-inline" onsubmit="return confirmarAnulacion()">
-				                                                            <input type="hidden" name="accion" value="cancelar_reserva">
-				                                                            <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-				                                                            <button type="submit" class="btn btn-sm btn-danger">
-				                                                                <i class="bi bi-x-circle"></i> Anular
-				                                                            </button>
-				                                                        </form>
-				                                                    </td>
-				                                                </tr>
-				                                            <?php endforeach; ?>
+								                                                <tr>
+								                                                    <td>Hab.								                                                            							                                                            						                                                            					                                                            				                                                            			                                                            		                                                            	                                                             <?php echo $reserva['habitacion_numero'] ?></td>
+								                                                    <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
+								                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+								                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+								                                                    <td><?php echo $dias ?> día<?php echo $dias > 1 ? 's' : '' ?></td>
+								                                                    <td>
+								                                                        <form method="post" class="d-inline" onsubmit="return confirmarAnulacion()">
+								                                                            <input type="hidden" name="accion" value="cancelar_reserva">
+								                                                            <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
+								                                                            <button type="submit" class="btn btn-sm btn-danger">
+								                                                                <i class="bi bi-x-circle"></i> Anular
+								                                                            </button>
+								                                                        </form>
+								                                                    </td>
+								                                                </tr>
+								                                            <?php endforeach; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -730,7 +780,7 @@
                                         <tbody>
                                             <?php foreach ($canceladas as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                                                                                                                                                 <?php echo $reserva['habitacion_numero'] ?></td>
+                                                    <td>Hab.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 <?php echo $reserva['habitacion_numero'] ?></td>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -748,21 +798,21 @@
                         $usuario     = obtener_info_usuario($conexionPDO, $_SESSION['userId']);
                         $foto_perfil = $usuario['foto_perfil'] ?? null;
                     ?>
-				                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
-				                    <hr>
+								                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
+								                    <hr>
 
-				                    <div class="row">
-				                        <!-- Foto de Perfil -->
-				                        <div class="col-md-4">
-				                            <div class="card shadow-sm">
-				                                <div class="card-header bg-primary text-white">
-				                                    <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Foto de Perfil</h5>
-				                                </div>
-				                                <div class="card-body text-center">
-				                                    <div id="fotoPerfilContainer" class="mb-3">
-				                                        <?php if ($foto_perfil && file_exists(__DIR__ . '/' . $foto_perfil)): ?>
-				                                            <img src="<?php echo htmlspecialchars($foto_perfil) ?>" alt="Foto de perfil" class="img-fluid rounded-circle" style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #0d6efd;">
-				                                        <?php else: ?>
+								                    <div class="row">
+								                        <!-- Foto de Perfil -->
+								                        <div class="col-md-4">
+								                            <div class="card shadow-sm">
+								                                <div class="card-header bg-primary text-white">
+								                                    <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Foto de Perfil</h5>
+								                                </div>
+								                                <div class="card-body text-center">
+								                                    <div id="fotoPerfilContainer" class="mb-3">
+								                                        <?php if ($foto_perfil && file_exists(__DIR__ . '/' . $foto_perfil)): ?>
+								                                            <img src="<?php echo htmlspecialchars($foto_perfil) ?>" alt="Foto de perfil" class="img-fluid rounded-circle" style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #0d6efd;">
+								                                        <?php else: ?>
                                             <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 200px; height: 200px; font-size: 80px;">
                                                 <i class="bi bi-person-fill"></i>
                                             </div>
@@ -889,6 +939,84 @@
         </div>
     </div>
 
+    <!-- Modal para Editar Reserva Usuario -->
+    <div class="modal fade" id="modalEditarReservaUsuario" tabindex="-1" aria-labelledby="modalEditarReservaUsuarioLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalEditarReservaUsuarioLabel">
+                        <i class="bi bi-pencil"></i> Editar Mi Reserva
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" id="formEditarReservaUsuario">
+                    <input type="hidden" name="accion" value="editar_reserva_usuario">
+                    <input type="hidden" name="id_reserva" id="editIdReservaUsuario">
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Solo puedes editar reservas pendientes de aprobación.
+                        </div>
+
+                        <!-- Fechas -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Fecha Inicio *</label>
+                                <input type="date" class="form-control" name="fecha_inicio" required
+                                       id="editFechaInicioUsuario" min="<?php echo date('Y-m-d'); ?>">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Fecha Fin *</label>
+                                <input type="date" class="form-control" name="fecha_fin" required
+                                       id="editFechaFinUsuario" min="<?php echo date('Y-m-d'); ?>">
+                            </div>
+                        </div>
+
+                        <!-- Habitación -->
+                        <div class="mb-3">
+                            <label class="form-label">Habitación *</label>
+                            <select class="form-select" name="id_habitacion" id="editHabitacionUsuario" required>
+                                <option value="">Seleccione una habitación</option>
+                                <?php
+                                    $habitaciones_modal = listar_habitaciones($conexionPDO);
+                                foreach ($habitaciones_modal as $hab): ?>
+                                    <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
+                                        Habitación                                                                                                       <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <!-- Número de camas -->
+                        <div class="mb-3">
+                            <label class="form-label">Número de Camas *</label>
+                            <div class="input-group">
+                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasEditUsuario(-1)">
+                                    <i class="bi bi-dash"></i>
+                                </button>
+                                <input type="number" class="form-control text-center" name="numero_camas"
+                                       id="editNumeroCamasUsuario" value="1" min="1" required readonly>
+                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasEditUsuario(1)">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted" id="editInfoCamasUsuario"></small>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <strong>Nota:</strong> Al cambiar el número de camas, deberás actualizar tus acompañantes después de la aprobación.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Guardar Cambios
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let contadorAcompanantes = 0;
@@ -998,6 +1126,17 @@
         // Variables para control de camas y habitación
         let camasDisponiblesMax = 0;
         let numeroCamasActual = 1;
+
+        // Auto-cargar disponibilidad si las fechas están pre-cargadas
+        window.addEventListener('DOMContentLoaded', function() {
+            const fechaInicio = document.getElementById('fecha_inicio');
+            const fechaFin = document.getElementById('fecha_fin');
+
+            if (fechaInicio && fechaFin && fechaInicio.value && fechaFin.value) {
+                // Disparar actualización de disponibilidad
+                actualizarDisponibilidad();
+            }
+        });
 
         // Funciones para disponibilidad y validación
         function actualizarDisponibilidad() {
@@ -1246,6 +1385,76 @@
         // Función para confirmar anulación de reserva
         function confirmarAnulacion() {
             return confirm('⚠️ ¿Estás seguro de que deseas anular esta reserva?\n\nEsta acción no se puede deshacer y la reserva será cancelada de forma permanente.');
+        }
+
+        // Función para editar reserva de usuario
+        function editarReservaUsuario(reserva) {
+            const modal = new bootstrap.Modal(document.getElementById('modalEditarReservaUsuario'));
+
+            // Rellenar datos
+            document.getElementById('editIdReservaUsuario').value = reserva.id;
+            document.getElementById('editFechaInicioUsuario').value = reserva.fecha_inicio;
+            document.getElementById('editFechaFinUsuario').value = reserva.fecha_fin;
+            document.getElementById('editHabitacionUsuario').value = reserva.id_habitacion;
+            document.getElementById('editNumeroCamasUsuario').value = reserva.numero_camas;
+
+            // Actualizar info
+            const selectedOption = document.getElementById('editHabitacionUsuario').options[document.getElementById('editHabitacionUsuario').selectedIndex];
+            maxCamasEditUsuario = parseInt(selectedOption.dataset.maxCamas) || 1;
+            document.getElementById('editInfoCamasUsuario').textContent = `Máximo ${maxCamasEditUsuario} camas disponibles`;
+
+            modal.show();
+        }
+
+        // Variables para edición de usuario
+        let maxCamasEditUsuario = 1;
+
+        function cambiarCamasEditUsuario(cambio) {
+            const input = document.getElementById('editNumeroCamasUsuario');
+            let nuevoValor = parseInt(input.value) + cambio;
+
+            if (nuevoValor < 1) {
+                nuevoValor = 1;
+            } else if (nuevoValor > maxCamasEditUsuario) {
+                nuevoValor = maxCamasEditUsuario;
+            }
+
+            input.value = nuevoValor;
+        }
+
+        // Actualizar max camas cuando cambie habitación en edición de usuario
+        if (document.getElementById('editHabitacionUsuario')) {
+            document.getElementById('editHabitacionUsuario').addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                maxCamasEditUsuario = parseInt(selectedOption.dataset.maxCamas) || 1;
+                document.getElementById('editNumeroCamasUsuario').max = maxCamasEditUsuario;
+                document.getElementById('editNumeroCamasUsuario').value = Math.min(document.getElementById('editNumeroCamasUsuario').value, maxCamasEditUsuario);
+                document.getElementById('editInfoCamasUsuario').textContent = `Máximo ${maxCamasEditUsuario} camas disponibles`;
+            });
+        }
+
+        // Validar fechas en edición de usuario
+        if (document.getElementById('editFechaFinUsuario')) {
+            document.getElementById('editFechaFinUsuario').addEventListener('change', function() {
+                const fechaInicio = document.getElementById('editFechaInicioUsuario').value;
+                const fechaFin = this.value;
+
+                if (fechaInicio && fechaFin && fechaFin <= fechaInicio) {
+                    alert('La fecha de fin debe ser posterior a la fecha de inicio');
+                    this.value = '';
+                }
+            });
+        }
+
+        // Función para ir a reserva con fecha preseleccionada
+        function irAReserva(fecha) {
+            // Calcular fecha de salida (siguiente día)
+            const fechaObj = new Date(fecha + 'T00:00:00');
+            fechaObj.setDate(fechaObj.getDate() + 1);
+            const fechaSalida = fechaObj.toISOString().split('T')[0];
+
+            // Redirigir a nueva reserva con fechas
+            window.location.href = `viewSocio.php?accion=nueva_reserva&fecha_inicio=${fecha}&fecha_fin=${fechaSalida}`;
         }
     </script>
 </body>
