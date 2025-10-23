@@ -20,9 +20,9 @@ if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_inicio) ||
     exit;
 }
 
-// Obtener disponibilidad
-$disponibilidad = obtener_disponibilidad($conexionPDO, $fecha_inicio, $fecha_fin);
+// Obtener habitaciones disponibles con número de camas libres
+$habitaciones_disponibles = obtener_habitaciones_disponibles($conexionPDO, $fecha_inicio, $fecha_fin);
 
 // Devolver JSON
 header('Content-Type: application/json');
-echo json_encode($disponibilidad);
+echo json_encode($habitaciones_disponibles);

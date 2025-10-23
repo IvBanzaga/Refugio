@@ -52,20 +52,35 @@ CREATE TABLE camas (
 CREATE TABLE reservas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     id_usuario INT NOT NULL,
-    id_cama INT NOT NULL,
+    id_habitacion INT NOT NULL,
+    numero_camas TINYINT NOT NULL DEFAULT 1,
+    id_cama INT NULL, -- Campo legacy para compatibilidad
     fecha_inicio DATE NOT NULL,
     fecha_fin DATE NOT NULL,
     estado ENUM('pendiente', 'reservada', 'cancelada') NOT NULL DEFAULT 'pendiente',
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_reserva_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios(id) ON DELETE CASCADE,
-    CONSTRAINT fk_reserva_cama FOREIGN KEY (id_cama) REFERENCES camas(id) ON DELETE CASCADE,
-    CONSTRAINT reserva_unica_cama_periodo UNIQUE (id_cama, fecha_inicio, fecha_fin),
+    CONSTRAINT fk_reserva_habitacion FOREIGN KEY (id_habitacion) REFERENCES habitaciones(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reserva_cama FOREIGN KEY (id_cama) REFERENCES camas(id) ON DELETE SET NULL,
     INDEX idx_estado (estado),
     INDEX idx_usuario (id_usuario),
+    INDEX idx_habitacion (id_habitacion),
     INDEX idx_fechas (fecha_inicio, fecha_fin)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 5. Acompañantes
+-- 5. Relación Reservas-Camas (muchos a muchos)
+CREATE TABLE reservas_camas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    id_reserva INT NOT NULL,
+    id_cama INT NOT NULL,
+    CONSTRAINT fk_rc_reserva FOREIGN KEY (id_reserva) REFERENCES reservas(id) ON DELETE CASCADE,
+    CONSTRAINT fk_rc_cama FOREIGN KEY (id_cama) REFERENCES camas(id) ON DELETE CASCADE,
+    CONSTRAINT reserva_cama_unica UNIQUE (id_reserva, id_cama),
+    INDEX idx_reserva (id_reserva),
+    INDEX idx_cama (id_cama)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6. Acompañantes
 CREATE TABLE acompanantes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     id_reserva INT NOT NULL,
