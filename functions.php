@@ -381,22 +381,23 @@ function obtener_habitaciones_disponibles($conexion, $fecha_inicio, $fecha_fin)
             return [];
         }
 
+        // Consulta corregida: obtener habitaciones y calcular disponibilidad
         $stmt = $conexion->prepare("
             SELECT
                 h.id,
                 h.numero,
                 h.capacidad,
-                COUNT(DISTINCT c.id) as camas_totales,
-                (COUNT(DISTINCT c.id) - COUNT(DISTINCT rc.id_cama)) as camas_disponibles
+                (SELECT COUNT(*) FROM camas WHERE id_habitacion = h.id) as camas_totales,
+                (SELECT COUNT(*) FROM camas WHERE id_habitacion = h.id) -
+                (SELECT COUNT(DISTINCT rc.id_cama)
+                 FROM reservas_camas rc
+                 INNER JOIN reservas r ON rc.id_reserva = r.id
+                 INNER JOIN camas c ON rc.id_cama = c.id
+                 WHERE c.id_habitacion = h.id
+                 AND r.estado IN ('pendiente', 'reservada')
+                 AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+                ) as camas_disponibles
             FROM habitaciones h
-            INNER JOIN camas c ON h.id = c.id_habitacion
-            LEFT JOIN reservas_camas rc ON c.id = rc.id_cama
-            LEFT JOIN reservas r ON rc.id_reserva = r.id
-                AND r.estado IN ('pendiente', 'reservada')
-                AND (
-                    (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
-                )
-            GROUP BY h.id, h.numero, h.capacidad
             HAVING camas_disponibles > 0
             ORDER BY h.numero
         ");
