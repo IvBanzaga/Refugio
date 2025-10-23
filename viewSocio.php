@@ -268,16 +268,16 @@
                     </div>
                 </div>
                 <nav class="nav flex-column mt-3">
-                    <a class="nav-link                                                                                                                   <?php echo $accion === 'calendario' ? 'active' : '' ?>" href="?accion=calendario">
+                    <a class="nav-link                                                                                                                                                         <?php echo $accion === 'calendario' ? 'active' : '' ?>" href="?accion=calendario">
                         <i class="bi bi-calendar3"></i> Calendario
                     </a>
-                    <a class="nav-link                                                                                                                   <?php echo $accion === 'nueva_reserva' ? 'active' : '' ?>" href="?accion=nueva_reserva">
+                    <a class="nav-link                                                                                                                                                         <?php echo $accion === 'nueva_reserva' ? 'active' : '' ?>" href="?accion=nueva_reserva">
                         <i class="bi bi-plus-circle-fill"></i> Nueva Reserva
                     </a>
-                    <a class="nav-link                                                                                                                   <?php echo $accion === 'mis_reservas' ? 'active' : '' ?>" href="?accion=mis_reservas">
+                    <a class="nav-link                                                                                                                                                         <?php echo $accion === 'mis_reservas' ? 'active' : '' ?>" href="?accion=mis_reservas">
                         <i class="bi bi-list-check"></i> Mis Reservas
                     </a>
-                    <a class="nav-link                                                                                                                   <?php echo $accion === 'perfil' ? 'active' : '' ?>" href="?accion=perfil">
+                    <a class="nav-link                                                                                                                                                         <?php echo $accion === 'perfil' ? 'active' : '' ?>" href="?accion=perfil">
                         <i class="bi bi-person-circle"></i> Mi Perfil
                     </a>
                     <hr class="text-white">
@@ -355,14 +355,14 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-	                                            SELECT r.id, r.estado, h.numero as habitacion, c.numero as cama
-	                                            FROM reservas r
-	                                            JOIN camas c ON r.id_cama = c.id
-	                                            JOIN habitaciones h ON c.id_habitacion = h.id
-	                                            WHERE r.id_usuario = :id_usuario
-	                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-	                                            AND r.estado IN ('pendiente', 'reservada')
-	                                        ");
+		                                            SELECT r.id, r.estado, h.numero as habitacion, c.numero as cama
+		                                            FROM reservas r
+		                                            JOIN camas c ON r.id_cama = c.id
+		                                            JOIN habitaciones h ON c.id_habitacion = h.id
+		                                            WHERE r.id_usuario = :id_usuario
+		                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+		                                            AND r.estado IN ('pendiente', 'reservada')
+		                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -370,11 +370,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-	                                            SELECT COUNT(*) as total
-	                                            FROM reservas
-	                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-	                                            AND estado = 'reservada'
-	                                        ");
+		                                            SELECT COUNT(*) as total
+		                                            FROM reservas
+		                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+		                                            AND estado = 'reservada'
+		                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -536,8 +536,8 @@
                                         <tbody>
                                             <?php foreach ($pendientes as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                                                                                     <?php echo $reserva['habitacion_numero'] ?></td>
-                                                    <td>Cama                                                                                                                                                                                     <?php echo $reserva['cama_numero'] ?></td>
+                                                    <td>Hab.                                                                                                                                                                                                                                                 <?php echo $reserva['habitacion_numero'] ?></td>
+                                                    <td>Cama                                                                                                                                                                                                                                                 <?php echo $reserva['cama_numero'] ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                     <td><?php echo date('d/m/Y H:i', strtotime($reserva['fecha_creacion'])) ?></td>
@@ -569,6 +569,9 @@
                         </div>
                         <div class="card-body">
                             <?php if (count($aprobadas) > 0): ?>
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> Puedes anular tus reservas aprobadas. Esta acción no se puede deshacer.
+                                </div>
                                 <div class="table-responsive">
                                     <table class="table table-hover">
                                         <thead>
@@ -578,20 +581,30 @@
                                                 <th>Fecha Entrada</th>
                                                 <th>Fecha Salida</th>
                                                 <th>Días</th>
+                                                <th>Acciones</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <?php foreach ($aprobadas as $reserva):
                                                     $dias = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
                                                 ?>
-				                                                <tr>
-				                                                    <td>Hab.				                                                            			                                                            		                                                             <?php echo $reserva['habitacion_numero'] ?></td>
-				                                                    <td>Cama				                                                            			                                                            		                                                             <?php echo $reserva['cama_numero'] ?></td>
-				                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-				                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-				                                                    <td><?php echo $dias ?> días</td>
-				                                                </tr>
-				                                            <?php endforeach; ?>
+	                                                <tr>
+	                                                    <td>Hab.	                                                             <?php echo $reserva['habitacion_numero'] ?></td>
+	                                                    <td>Cama	                                                             <?php echo $reserva['cama_numero'] ?></td>
+	                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+	                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+	                                                    <td><?php echo $dias ?> día<?php echo $dias > 1 ? 's' : '' ?></td>
+	                                                    <td>
+	                                                        <form method="post" class="d-inline" onsubmit="return confirmarAnulacion()">
+	                                                            <input type="hidden" name="accion" value="cancelar_reserva">
+	                                                            <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
+	                                                            <button type="submit" class="btn btn-sm btn-danger">
+	                                                                <i class="bi bi-x-circle"></i> Anular
+	                                                            </button>
+	                                                        </form>
+	                                                    </td>
+	                                                </tr>
+	                                            <?php endforeach; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -621,8 +634,8 @@
                                         <tbody>
                                             <?php foreach ($canceladas as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                                                                                     <?php echo $reserva['habitacion_numero'] ?></td>
-                                                    <td>Cama                                                                                                                                                                                     <?php echo $reserva['cama_numero'] ?></td>
+                                                    <td>Hab.                                                                                                                                                                                                                                                 <?php echo $reserva['habitacion_numero'] ?></td>
+                                                    <td>Cama                                                                                                                                                                                                                                                 <?php echo $reserva['cama_numero'] ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                 </tr>
@@ -639,21 +652,21 @@
                         $usuario     = obtener_info_usuario($conexionPDO, $_SESSION['userId']);
                         $foto_perfil = $usuario['foto_perfil'] ?? null;
                     ?>
-			                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
-			                    <hr>
+				                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
+				                    <hr>
 
-			                    <div class="row">
-			                        <!-- Foto de Perfil -->
-			                        <div class="col-md-4">
-			                            <div class="card shadow-sm">
-			                                <div class="card-header bg-primary text-white">
-			                                    <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Foto de Perfil</h5>
-			                                </div>
-			                                <div class="card-body text-center">
-			                                    <div id="fotoPerfilContainer" class="mb-3">
-			                                        <?php if ($foto_perfil && file_exists(__DIR__ . '/' . $foto_perfil)): ?>
-			                                            <img src="<?php echo htmlspecialchars($foto_perfil) ?>" alt="Foto de perfil" class="img-fluid rounded-circle" style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #0d6efd;">
-			                                        <?php else: ?>
+				                    <div class="row">
+				                        <!-- Foto de Perfil -->
+				                        <div class="col-md-4">
+				                            <div class="card shadow-sm">
+				                                <div class="card-header bg-primary text-white">
+				                                    <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Foto de Perfil</h5>
+				                                </div>
+				                                <div class="card-body text-center">
+				                                    <div id="fotoPerfilContainer" class="mb-3">
+				                                        <?php if ($foto_perfil && file_exists(__DIR__ . '/' . $foto_perfil)): ?>
+				                                            <img src="<?php echo htmlspecialchars($foto_perfil) ?>" alt="Foto de perfil" class="img-fluid rounded-circle" style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #0d6efd;">
+				                                        <?php else: ?>
                                             <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 200px; height: 200px; font-size: 80px;">
                                                 <i class="bi bi-person-fill"></i>
                                             </div>
@@ -716,40 +729,59 @@
                                         </div>
 
                                         <hr>
-                                        <h6 class="text-primary mb-3"><i class="bi bi-pencil-fill"></i> Datos Editables</h6>
 
-                                        <!-- Información EDITABLE -->
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <h6 class="text-primary mb-0"><i class="bi bi-pencil-fill"></i> Datos de Contacto</h6>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnEditarPerfil" onclick="habilitarEdicion()">
+                                                <i class="bi bi-pencil"></i> Editar
+                                            </button>
+                                        </div>
+
+                                        <!-- Información EDITABLE (inicialmente deshabilitada) -->
                                         <div class="row mb-3">
                                             <div class="col-md-6">
                                                 <label class="form-label fw-bold">Email: <span class="text-danger">*</span></label>
                                                 <input type="email"
-                                                       class="form-control"
+                                                       class="form-control campo-editable"
+                                                       id="inputEmail"
                                                        name="email"
                                                        value="<?php echo htmlspecialchars($usuario['email']) ?>"
+                                                       readonly
                                                        required>
                                                 <small class="text-muted">Usado para iniciar sesión</small>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label fw-bold">Teléfono:</label>
                                                 <input type="tel"
-                                                       class="form-control"
+                                                       class="form-control campo-editable"
+                                                       id="inputTelefono"
                                                        name="telf"
                                                        value="<?php echo htmlspecialchars($usuario['telf'] ?? '') ?>"
                                                        placeholder="Ej: 600123456"
-                                                       pattern="[0-9]{9,15}">
+                                                       pattern="[0-9]{9,15}"
+                                                       readonly>
                                                 <small class="text-muted">9-15 dígitos</small>
                                             </div>
                                         </div>
 
-                                        <div class="d-grid gap-2">
-                                            <button type="submit" class="btn btn-primary">
-                                                <i class="bi bi-save"></i> Guardar Cambios
-                                            </button>
+                                        <div class="d-grid gap-2" id="botonesEdicion" style="display: none;">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <button type="submit" class="btn btn-success w-100">
+                                                        <i class="bi bi-check-circle"></i> Guardar Cambios
+                                                    </button>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <button type="button" class="btn btn-secondary w-100" onclick="cancelarEdicion()">
+                                                        <i class="bi bi-x-circle"></i> Cancelar
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        <div class="alert alert-warning mt-3 mb-0">
-                                            <i class="bi bi-exclamation-triangle-fill"></i>
-                                            <strong>Nota:</strong> Solo puedes editar tu email y teléfono. Para modificar otros datos, contacta con el administrador.
+                                        <div class="alert alert-info mt-3 mb-0">
+                                            <i class="bi bi-info-circle"></i>
+                                            <strong>Nota:</strong> Haz clic en "Editar" para modificar tu email o teléfono. Para cambiar otros datos, contacta con el administrador.
                                         </div>
                                     </form>
                                 </div>
@@ -916,6 +948,58 @@
                 ${mensaje}
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>`;
+        }
+
+        // Funciones para edición de perfil
+        let emailOriginal = '';
+        let telefonoOriginal = '';
+
+        function habilitarEdicion() {
+            const inputEmail = document.getElementById('inputEmail');
+            const inputTelefono = document.getElementById('inputTelefono');
+            const btnEditar = document.getElementById('btnEditarPerfil');
+            const botonesEdicion = document.getElementById('botonesEdicion');
+
+            // Guardar valores originales
+            emailOriginal = inputEmail.value;
+            telefonoOriginal = inputTelefono.value;
+
+            // Habilitar campos
+            inputEmail.removeAttribute('readonly');
+            inputTelefono.removeAttribute('readonly');
+            inputEmail.classList.add('border-primary');
+            inputTelefono.classList.add('border-primary');
+            inputEmail.focus();
+
+            // Mostrar/ocultar botones
+            btnEditar.style.display = 'none';
+            botonesEdicion.style.display = 'block';
+        }
+
+        function cancelarEdicion() {
+            const inputEmail = document.getElementById('inputEmail');
+            const inputTelefono = document.getElementById('inputTelefono');
+            const btnEditar = document.getElementById('btnEditarPerfil');
+            const botonesEdicion = document.getElementById('botonesEdicion');
+
+            // Restaurar valores originales
+            inputEmail.value = emailOriginal;
+            inputTelefono.value = telefonoOriginal;
+
+            // Deshabilitar campos
+            inputEmail.setAttribute('readonly', 'readonly');
+            inputTelefono.setAttribute('readonly', 'readonly');
+            inputEmail.classList.remove('border-primary');
+            inputTelefono.classList.remove('border-primary');
+
+            // Mostrar/ocultar botones
+            btnEditar.style.display = 'block';
+            botonesEdicion.style.display = 'none';
+        }
+
+        // Función para confirmar anulación de reserva
+        function confirmarAnulacion() {
+            return confirm('⚠️ ¿Estás seguro de que deseas anular esta reserva?\n\nEsta acción no se puede deshacer y la reserva será cancelada de forma permanente.');
         }
     </script>
 </body>
