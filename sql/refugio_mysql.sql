@@ -52,7 +52,7 @@ CREATE TABLE camas (
 CREATE TABLE reservas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     id_usuario INT NULL COMMENT 'NULL para reservas especiales del admin',
-    id_habitacion INT NOT NULL,
+    id_habitacion INT NULL COMMENT 'NULL para reservas de TODO EL REFUGIO',
     numero_camas TINYINT NOT NULL DEFAULT 1,
     id_cama INT NULL, -- Campo legacy para compatibilidad
     fecha_inicio DATE NOT NULL,

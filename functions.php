@@ -345,7 +345,7 @@ function listar_reservas($conexion, $filtros = [])
                    GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas_numeros
             FROM reservas r
             LEFT JOIN usuarios u ON r.id_usuario = u.id
-            JOIN habitaciones h ON r.id_habitacion = h.id
+            LEFT JOIN habitaciones h ON r.id_habitacion = h.id
             LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
             LEFT JOIN camas c ON rc.id_cama = c.id
             WHERE 1=1
@@ -624,99 +624,69 @@ function crear_reserva_todo_refugio($conexion, $datos)
     try {
         $conexion->beginTransaction();
 
-        // Obtener todas las habitaciones
-        $stmt = $conexion->prepare("SELECT id FROM habitaciones ORDER BY numero");
-        $stmt->execute();
-        $habitaciones = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        // Obtener TODAS las camas disponibles del refugio
+        $stmt_camas = $conexion->prepare("
+            SELECT c.id
+            FROM camas c
+            WHERE c.estado = 'libre'
+            AND c.id NOT IN (
+                SELECT DISTINCT rc.id_cama
+                FROM reservas_camas rc
+                INNER JOIN reservas r ON rc.id_reserva = r.id
+                WHERE r.estado IN ('pendiente', 'reservada')
+                AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+            )
+            ORDER BY c.id_habitacion, c.numero
+        ");
 
-        if (empty($habitaciones)) {
-            throw new Exception("No hay habitaciones disponibles");
+        $stmt_camas->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt_camas->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt_camas->execute();
+
+        $camas_disponibles = $stmt_camas->fetchAll(PDO::FETCH_COLUMN);
+
+        if (empty($camas_disponibles)) {
+            throw new Exception("No hay camas disponibles en las fechas seleccionadas");
         }
 
-        $reservas_creadas = 0;
-        $total_camas      = 0;
+        $total_camas = count($camas_disponibles);
 
-        // Crear una reserva especial por cada habitación
-        foreach ($habitaciones as $id_habitacion) {
-            // Obtener todas las camas disponibles de la habitación
-            $stmt_camas = $conexion->prepare("
-                SELECT id FROM camas
-                WHERE id_habitacion = :id_habitacion
-                AND estado = 'libre'
-                AND id NOT IN (
-                    SELECT DISTINCT c.id
-                    FROM camas c
-                    INNER JOIN reservas_camas rc ON c.id = rc.id_cama
-                    INNER JOIN reservas r ON rc.id_reserva = r.id
-                    WHERE c.id_habitacion = :id_habitacion
-                    AND r.estado IN ('pendiente', 'reservada')
-                    AND (
-                        (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
-                    )
-                )
-                ORDER BY numero
-            ");
+        // Crear UNA SOLA reserva con id_habitacion = NULL para "TODO EL REFUGIO"
+        $stmt_reserva = $conexion->prepare("
+            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado, observaciones)
+            VALUES (NULL, NULL, :numero_camas, :fecha_inicio, :fecha_fin, 'reservada', :motivo)
+        ");
 
-            $stmt_camas->bindParam(':id_habitacion', $id_habitacion, PDO::PARAM_INT);
-            $stmt_camas->bindParam(':fecha_inicio', $datos['fecha_inicio']);
-            $stmt_camas->bindParam(':fecha_fin', $datos['fecha_fin']);
-            $stmt_camas->execute();
+        $motivo_completo = "TODO EL REFUGIO - " . $datos['motivo'];
+        $stmt_reserva->bindParam(':numero_camas', $total_camas, PDO::PARAM_INT);
+        $stmt_reserva->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt_reserva->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt_reserva->bindParam(':motivo', $motivo_completo);
+        $stmt_reserva->execute();
 
-            $camas_disponibles = $stmt_camas->fetchAll(PDO::FETCH_COLUMN);
+        $id_reserva = $conexion->lastInsertId();
 
-            // Si no hay camas disponibles en esta habitación, continuar con la siguiente
-            if (empty($camas_disponibles)) {
-                continue;
-            }
+        // Crear relación entre reserva y TODAS las camas disponibles
+        $stmt_cama = $conexion->prepare("
+            INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)
+        ");
 
-            $num_camas_habitacion = count($camas_disponibles);
+        // Actualizar estado de las camas asignadas
+        $stmt_update = $conexion->prepare("UPDATE camas SET estado = 'reservada' WHERE id = :id_cama");
 
-            // Insertar reserva para esta habitación
-            $stmt_reserva = $conexion->prepare("
-                INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado, observaciones)
-                VALUES (NULL, :id_habitacion, :numero_camas, :fecha_inicio, :fecha_fin, 'reservada', :motivo)
-            ");
+        foreach ($camas_disponibles as $id_cama) {
+            // Crear relación
+            $stmt_cama->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+            $stmt_cama->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+            $stmt_cama->execute();
 
-            $motivo_completo = "TODO EL REFUGIO - " . $datos['motivo'];
-            $stmt_reserva->bindParam(':id_habitacion', $id_habitacion, PDO::PARAM_INT);
-            $stmt_reserva->bindParam(':numero_camas', $num_camas_habitacion, PDO::PARAM_INT);
-            $stmt_reserva->bindParam(':fecha_inicio', $datos['fecha_inicio']);
-            $stmt_reserva->bindParam(':fecha_fin', $datos['fecha_fin']);
-            $stmt_reserva->bindParam(':motivo', $motivo_completo);
-            $stmt_reserva->execute();
-
-            $id_reserva = $conexion->lastInsertId();
-
-            // Crear relación entre reserva y camas asignadas
-            $stmt_cama = $conexion->prepare("
-                INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)
-            ");
-
-            // Actualizar estado de las camas asignadas
-            $stmt_update = $conexion->prepare("UPDATE camas SET estado = 'reservada' WHERE id = :id_cama");
-
-            foreach ($camas_disponibles as $id_cama) {
-                // Crear relación
-                $stmt_cama->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
-                $stmt_cama->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
-                $stmt_cama->execute();
-
-                // Actualizar estado de la cama
-                $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
-                $stmt_update->execute();
-
-                $total_camas++;
-            }
-
-            $reservas_creadas++;
-        }
-
-        if ($reservas_creadas === 0) {
-            throw new Exception("No se pudo crear ninguna reserva. Verifica disponibilidad.");
+            // Actualizar estado de la cama
+            $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+            $stmt_update->execute();
         }
 
         $conexion->commit();
-        error_log("Reserva TODO EL REFUGIO: {$reservas_creadas} habitaciones, {$total_camas} camas totales");
+        error_log("Reserva TODO EL REFUGIO creada: {$total_camas} camas totales");
         return true;
     } catch (Exception $e) {
         $conexion->rollBack();
