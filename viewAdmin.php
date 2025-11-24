@@ -1,4 +1,7 @@
 <?php
+    ini_set('display_errors', 1);
+    ini_set('display_startup_errors', 1);
+    error_reporting(E_ALL);
 
     require 'conexion.php';
     require 'functions.php';
@@ -43,7 +46,17 @@
                 break;
 
             case 'actualizar_usuario':
-                $id    = (int) $_POST['id'];
+                $id = (int) $_POST['id'];
+
+                // Proteger al usuario admin principal
+                $usuario_actual = obtener_usuario($conexionPDO, $id);
+                if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
+                    $mensaje      = "No se puede modificar el usuario administrador principal";
+                    $tipo_mensaje = 'danger';
+                    $accion       = 'usuarios';
+                    break;
+                }
+
                 $datos = [
                     'num_socio' => sanitize_input($_POST['num_socio']),
                     'dni'       => sanitize_input($_POST['dni']),
@@ -67,6 +80,16 @@
 
             case 'eliminar_usuario':
                 $id = (int) $_POST['id'];
+
+                // Proteger al usuario admin principal
+                $usuario_actual = obtener_usuario($conexionPDO, $id);
+                if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
+                    $mensaje      = "No se puede eliminar el usuario administrador principal";
+                    $tipo_mensaje = 'danger';
+                    $accion       = 'usuarios';
+                    break;
+                }
+
                 if (eliminar_usuario($conexionPDO, $id)) {
                     $mensaje = "Usuario eliminado exitosamente";
                 } else {
@@ -216,6 +239,64 @@
                 }
                 $accion = 'reservas';
                 break;
+
+            case 'export_csv':
+                $tipo_reserva = $_POST['tipo_reserva'] ?? 'pendiente';
+                $filename     = "reservas_{$tipo_reserva}_" . date('Y-m-d') . ".csv";
+
+                header('Content-Type: text/csv');
+                header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+                $output = fopen('php://output', 'w');
+
+                // Encabezados CSV
+                fputcsv($output, ['ID', 'Usuario', 'Email', 'Habitacion', 'Camas', 'Entrada', 'Salida', 'Estado', 'Fecha Creacion']);
+
+                // Obtener datos (sin paginación para exportar todo)
+                $filtros = ['estado' => $tipo_reserva];
+
+                // Aplicar filtros de búsqueda si existen
+                if (! empty($_POST['search'])) {
+                    $filtros['search'] = $_POST['search'];
+                }
+
+                // Aplicar ordenamiento si existe
+                if (! empty($_POST['sort'])) {
+                    $filtros['order_by']  = $_POST['sort'];
+                    $filtros['order_dir'] = $_POST['order_dir'] ?? 'DESC';
+                }
+
+                $reservas = listar_reservas($conexionPDO, $filtros);
+
+                foreach ($reservas as $row) {
+                    fputcsv($output, [
+                        $row['id'],
+                        $row['nombre'] . ' ' . $row['apellido1'],
+                        $row['email'],
+                        $row['habitacion_numero'] ?? 'Todo el Refugio',
+                        $row['numero_camas'],
+                        $row['fecha_inicio'],
+                        $row['fecha_fin'],
+                        $row['estado'],
+                        $row['fecha_creacion'],
+                    ]);
+                }
+
+                fclose($output);
+                exit;
+                break;
+
+            case 'export_usuarios_csv':
+                $search = $_GET['search'] ?? '';
+                $sort   = $_GET['sort'] ?? 'num_socio';
+                $dir    = $_GET['dir'] ?? 'ASC';
+
+                export_usuarios_csv($conexionPDO, [
+                    'search'    => $search,
+                    'order_by'  => $sort,
+                    'order_dir' => $dir,
+                ]);
+                break;
         }
     }
 
@@ -227,15 +308,79 @@
     $usuario_editar      = null;
 
     if ($accion === 'usuarios' || $accion === 'editar_usuario') {
-        $usuarios = listar_usuarios($conexionPDO);
+        // Parámetros de paginación y filtros para usuarios
+        $page_usuarios      = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+        $limit_usuarios     = 10;
+        $offset_usuarios    = ($page_usuarios - 1) * $limit_usuarios;
+        $search_usuarios    = $_GET['search'] ?? '';
+        $sort_usuarios      = $_GET['sort'] ?? 'num_socio';
+        $order_dir_usuarios = $_GET['dir'] ?? 'ASC';
+
+        $filtros_usuarios = [
+            'page'      => $page_usuarios,
+            'limit'     => $limit_usuarios,
+            'search'    => $search_usuarios,
+            'order_by'  => $sort_usuarios,
+            'order_dir' => $order_dir_usuarios,
+        ];
+
+        $usuarios         = listar_usuarios_paginado($conexionPDO, $filtros_usuarios);
+        $total_usuarios   = contar_usuarios($conexionPDO, ['search' => $search_usuarios]);
+        $paginas_usuarios = ceil($total_usuarios / $limit_usuarios);
 
         if ($accion === 'editar_usuario' && isset($_GET['id'])) {
             $usuario_editar = obtener_usuario($conexionPDO, (int) $_GET['id']);
         }
     } elseif ($accion === 'reservas') {
-        $reservas_pendientes = listar_reservas($conexionPDO, ['estado' => 'pendiente']);
-        $reservas_aprobadas  = listar_reservas($conexionPDO, ['estado' => 'reservada']);
-        $reservas_canceladas = listar_reservas($conexionPDO, ['estado' => 'cancelada']);
+        // Parámetros de paginación y filtros
+        $page      = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+        $limit     = 5;
+        $offset    = ($page - 1) * $limit;
+        $search    = $_GET['search'] ?? '';
+        $sort      = $_GET['sort'] ?? 'fecha_creacion';
+        $order_dir = $_GET['dir'] ?? 'DESC';
+        $tab       = $_GET['tab'] ?? 'pendientes'; // Para saber qué pestaña está activa
+
+        // Filtros comunes
+        $filtros_base = [
+            'limit'     => $limit,
+            'offset'    => $offset,
+            'search'    => $search,
+            'order_by'  => $sort,
+            'order_dir' => $order_dir,
+        ];
+
+        // Reservas Pendientes
+        $filtros_pendientes = array_merge($filtros_base, ['estado' => 'pendiente']);
+        if ($tab !== 'pendientes') {
+                                                  // Si no es la pestaña activa, solo necesitamos el conteo o las primeras 5
+                                                  // Pero para simplificar, cargamos según la paginación si es la activa, o reset si no
+            unset($filtros_pendientes['offset']); // Reset offset for non-active tabs if needed, but keeping simple for now
+        }
+
+        // Ajustar offset solo para la pestaña activa
+        $filtros_pendientes['offset'] = ($tab === 'pendientes') ? $offset : 0;
+
+        $reservas_pendientes = listar_reservas($conexionPDO, $filtros_pendientes);
+        $total_pendientes    = contar_reservas($conexionPDO, array_merge($filtros_pendientes, ['limit' => null, 'offset' => null]));
+        $paginas_pendientes  = ceil($total_pendientes / $limit);
+
+        // Reservas Aprobadas
+        $filtros_aprobadas           = array_merge($filtros_base, ['estado' => 'reservada']);
+        $filtros_aprobadas['offset'] = ($tab === 'aprobadas') ? $offset : 0;
+
+        $reservas_aprobadas = listar_reservas($conexionPDO, $filtros_aprobadas);
+        $total_aprobadas    = contar_reservas($conexionPDO, array_merge($filtros_aprobadas, ['limit' => null, 'offset' => null]));
+        $paginas_aprobadas  = ceil($total_aprobadas / $limit);
+
+        // Reservas Canceladas
+        $filtros_canceladas           = array_merge($filtros_base, ['estado' => 'cancelada']);
+        $filtros_canceladas['offset'] = ($tab === 'canceladas') ? $offset : 0;
+
+        $reservas_canceladas = listar_reservas($conexionPDO, $filtros_canceladas);
+        $total_canceladas    = contar_reservas($conexionPDO, array_merge($filtros_canceladas, ['limit' => null, 'offset' => null]));
+        $paginas_canceladas  = ceil($total_canceladas / $limit);
+
     } elseif ($accion === 'dashboard') {
         $reservas_pendientes = listar_reservas($conexionPDO, ['estado' => 'pendiente']);
         $habitaciones        = listar_habitaciones($conexionPDO);
@@ -282,6 +427,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏔️</text></svg>">
     <title>Panel Administrador - Refugio</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
@@ -443,13 +589,13 @@
                     </div>
                 </div>
                 <nav class="nav flex-column mt-3">
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                   <?php echo $accion === 'dashboard' ? 'active' : '' ?>" href="?accion=dashboard">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $accion === 'dashboard' ? 'active' : '' ?>" href="?accion=dashboard">
                         <i class="bi bi-speedometer2"></i> Dashboard
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                   <?php echo $accion === 'usuarios' || $accion === 'editar_usuario' ? 'active' : '' ?>" href="?accion=usuarios">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $accion === 'usuarios' || $accion === 'editar_usuario' ? 'active' : '' ?>" href="?accion=usuarios">
                         <i class="bi bi-people-fill"></i> Usuarios
                     </a>
-                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                   <?php echo $accion === 'reservas' ? 'active' : '' ?>" href="?accion=reservas">
+                    <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $accion === 'reservas' ? 'active' : '' ?>" href="?accion=reservas">
                         <i class="bi bi-calendar-check"></i> Reservas
                     </a>
                     <hr class="text-white">
@@ -719,7 +865,7 @@
                                     <div class="col-md-6 mb-3">
                                         <div class="card">
                                             <div class="card-body">
-                                                <h6>Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      <?php echo $hab['numero'] ?></h6>
+                                                <h6>Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $hab['numero'] ?></h6>
                                                 <div class="progress mb-2">
                                                     <?php
                                                         $porcentaje = ($hab['camas_libres'] / $hab['total_camas']) * 100;
@@ -747,6 +893,34 @@
 
                     <div class="card shadow-sm">
                         <div class="card-body">
+                            <!-- Controles de búsqueda, ordenación y exportación -->
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <form method="get" class="input-group">
+                                        <input type="hidden" name="accion" value="usuarios">
+                                        <input type="text" class="form-control" name="search"
+                                               placeholder="Buscar por nombre, email, DNI..."
+                                               value="<?php echo htmlspecialchars($search_usuarios) ?>">
+                                        <button class="btn btn-outline-secondary" type="submit">
+                                            <i class="bi bi-search"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                                <div class="col-md-4">
+                                    <select class="form-select" onchange="window.location.href='?accion=usuarios&search=<?php echo urlencode($search_usuarios) ?>&sort=' + this.value + '&dir=<?php echo $order_dir_usuarios ?>'">
+                                        <option value="num_socio"                                                                                                                                                                                                                                                                                                                                                                                                                                                                        <?php echo $sort_usuarios === 'num_socio' ? 'selected' : '' ?>>Ordenar por Nº Socio</option>
+                                        <option value="nombre"                                                                                                                                                                                                                                                                                                                                                                                                                                                   <?php echo $sort_usuarios === 'nombre' ? 'selected' : '' ?>>Ordenar por Nombre</option>
+                                        <option value="email"                                                                                                                                                                                                                                                                                                                                                                                                                                            <?php echo $sort_usuarios === 'email' ? 'selected' : '' ?>>Ordenar por Email</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <a href="?accion=export_usuarios_csv&search=<?php echo urlencode($search_usuarios) ?>&sort=<?php echo urlencode($sort_usuarios) ?>&dir=<?php echo urlencode($order_dir_usuarios) ?>"
+                                       class="btn btn-success">
+                                        <i class="bi bi-file-earmark-spreadsheet"></i> Exportar CSV
+                                    </a>
+                                </div>
+                            </div>
+
                             <div class="table-responsive">
                                 <table class="table table-hover">
                                     <thead class="table-light">
@@ -774,22 +948,53 @@
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <a href="?accion=editar_usuario&id=<?php echo $usuario['id'] ?>" class="btn btn-sm btn-warning">
-                                                        <i class="bi bi-pencil-fill"></i>
-                                                    </a>
-                                                    <form method="post" class="d-inline">
-                                                        <input type="hidden" name="accion" value="eliminar_usuario">
-                                                        <input type="hidden" name="id" value="<?php echo $usuario['id'] ?>">
-                                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar este usuario?')">
-                                                            <i class="bi bi-trash-fill"></i>
-                                                        </button>
-                                                    </form>
+                                                    <?php if ($usuario['email'] !== 'admin@hostel.com'): ?>
+                                                        <a href="?accion=editar_usuario&id=<?php echo $usuario['id'] ?>" class="btn btn-sm btn-warning">
+                                                            <i class="bi bi-pencil-fill"></i>
+                                                        </a>
+                                                        <form method="post" class="d-inline">
+                                                            <input type="hidden" name="accion" value="eliminar_usuario">
+                                                            <input type="hidden" name="id" value="<?php echo $usuario['id'] ?>">
+                                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar este usuario?')">
+                                                                <i class="bi bi-trash-fill"></i>
+                                                            </button>
+                                                        </form>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-secondary">
+                                                            <i class="bi bi-shield-lock-fill"></i> Protegido
+                                                        </span>
+                                                    <?php endif; ?>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
                                 </table>
                             </div>
+
+                            <!-- Paginación -->
+                            <?php if ($paginas_usuarios > 1): ?>
+                                <nav class="mt-3">
+                                    <ul class="pagination justify-content-center">
+                                        <?php if ($page_usuarios > 1): ?>
+                                            <li class="page-item">
+                                                <a class="page-link" href="?accion=usuarios&page=<?php echo $page_usuarios - 1 ?>&search=<?php echo urlencode($search_usuarios) ?>&sort=<?php echo urlencode($sort_usuarios) ?>&dir=<?php echo urlencode($order_dir_usuarios) ?>">Anterior</a>
+                                            </li>
+                                        <?php endif; ?>
+
+                                        <?php for ($i = 1; $i <= $paginas_usuarios; $i++): ?>
+                                            <li class="page-item<?php echo $i === $page_usuarios ? 'active' : '' ?>">
+                                                <a class="page-link" href="?accion=usuarios&page=<?php echo $i ?>&search=<?php echo urlencode($search_usuarios) ?>&sort=<?php echo urlencode($sort_usuarios) ?>&dir=<?php echo urlencode($order_dir_usuarios) ?>"><?php echo $i ?></a>
+                                            </li>
+                                        <?php endfor; ?>
+
+                                        <?php if ($page_usuarios < $paginas_usuarios): ?>
+                                            <li class="page-item">
+                                                <a class="page-link" href="?accion=usuarios&page=<?php echo $page_usuarios + 1 ?>&search=<?php echo urlencode($search_usuarios) ?>&sort=<?php echo urlencode($sort_usuarios) ?>&dir=<?php echo urlencode($order_dir_usuarios) ?>">Siguiente</a>
+                                            </li>
+                                        <?php endif; ?>
+                                    </ul>
+                                </nav>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -856,7 +1061,7 @@
 
                                         <div class="row">
                                             <div class="col-md-6 mb-3">
-                                                <label class="form-label">Contraseña                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        <?php echo $usuario_editar ? '' : '*' ?></label>
+                                                <label class="form-label">Contraseña                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             <?php echo $usuario_editar ? '' : '*' ?></label>
                                                 <input type="password" name="password" class="form-control"
                                                        <?php echo $usuario_editar ? '' : 'required' ?>>
                                                 <?php if ($usuario_editar): ?>
@@ -866,8 +1071,8 @@
                                             <div class="col-md-6 mb-3">
                                                 <label class="form-label">Rol *</label>
                                                 <select name="rol" class="form-select" required>
-                                                    <option value="user"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo($usuario_editar && $usuario_editar['rol'] === 'user') ? 'selected' : '' ?>>User</option>
-                                                    <option value="admin"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    <?php echo($usuario_editar && $usuario_editar['rol'] === 'admin') ? 'selected' : '' ?>>Admin</option>
+                                                    <option value="user"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 <?php echo($usuario_editar && $usuario_editar['rol'] === 'user') ? 'selected' : '' ?>>User</option>
+                                                    <option value="admin"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             <?php echo($usuario_editar && $usuario_editar['rol'] === 'admin') ? 'selected' : '' ?>>Admin</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -896,236 +1101,286 @@
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h2><i class="bi bi-calendar-check"></i> Gestión de Reservas</h2>
                         <div>
-                            <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalReservaSocio">
-                                <i class="bi bi-person-plus"></i> Reserva para Socio
+                            <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalReservaSocio">
+                                <i class="bi bi-person-plus"></i> Nueva Reserva Socio
                             </button>
-                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservaEspecial">
-                                <i class="bi bi-calendar-event"></i> Reserva Especial
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservaEspecial">
+                                <i class="bi bi-calendar-event"></i> Nueva Reserva Especial
                             </button>
                         </div>
                     </div>
 
-                    <!-- Reservas Pendientes -->
-                    <div class="card shadow-sm mb-4">
-                        <div class="card-header bg-warning text-white">
-                            <h5 class="mb-0">Reservas Pendientes</h5>
-                        </div>
-                        <div class="card-body">
-                            <?php if (count($reservas_pendientes) > 0): ?>
-                                <div class="table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Usuario</th>
-                                                <th>Habitación</th>
-                                                <th>Camas</th>
-                                                <th>Entrada</th>
-                                                <th>Salida</th>
-                                                <th>Días</th>
-                                                <th>Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($reservas_pendientes as $reserva):
-                                                    $dias            = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
-                                                    $es_especial     = empty($reserva['nombre']);                        // Si no hay usuario, es reserva especial
-                                                    $es_todo_refugio = $es_especial && empty($reserva['id_habitacion']); // NULL = TODO EL REFUGIO
-                                                ?>
-												                                                <tr>
-												                                                    <td><?php echo $reserva['id'] ?></td>
-												                                                    <td>
-												                                                        <?php if ($es_especial): ?>
-												                                                            <strong class="text-primary"><i class="bi bi-calendar-event"></i> RESERVA ESPECIAL</strong><br>
-												                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['observaciones']) ?></small>
-												                                                        <?php else: ?>
-				                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
-				                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['num_socio']) ?></small>
-				                                                        <?php endif; ?>
-				                                                    </td>
-				                                                    <td>
-				                                                        <?php if ($es_todo_refugio): ?>
-				                                                            <strong class="text-success"><i class="bi bi-building"></i> TODO</strong>
-				                                                        <?php else: ?>
-				                                                            Hab.<?php echo $reserva['habitacion_numero'] ?>
-				                                                        <?php endif; ?>
-				                                                    </td>
-				                                                    <td>Cama				                                                            				                                                            				                                                            				                                                            				                                                            				                                                            				                                                            				                                                            				                                                            			                                                            		                                                             <?php echo $reserva['camas_numeros'] ?? $reserva['numero_camas'] . ' camas' ?></td>
-				                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-				                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-				                                                    <td><?php echo $dias ?> días</td>
-				                                                    <td>
-				                                                        <div class="btn-group" role="group">
-				                                                            <form method="post" class="d-inline">
-				                                                                <input type="hidden" name="accion" value="aprobar_reserva">
-				                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-				                                                                <button type="submit" class="btn btn-sm btn-success">
-				                                                                    <i class="bi bi-check-lg"></i> Aprobar
-				                                                                </button>
-				                                                            </form>
-				                                                            <form method="post" class="d-inline">
-				                                                                <input type="hidden" name="accion" value="rechazar_reserva">
-				                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-				                                                                <button type="submit" class="btn btn-sm btn-danger">
-				                                                                    <i class="bi bi-x-lg"></i> Rechazar
-				                                                                </button>
-				                                                            </form>
-				                                                        </div>
-				                                                    </td>
-				                                                </tr>
-				                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php else: ?>
-                                <p class="text-center text-muted py-4">No hay reservas pendientes</p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
+                    <!-- Tabs de Navegación -->
+                    <ul class="nav nav-tabs mb-4">
+                        <li class="nav-item">
+                            <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           <?php echo $tab === 'pendientes' ? 'active' : '' ?>" href="?accion=reservas&tab=pendientes">
+                                Pendientes <span class="badge bg-warning text-dark"><?php echo $total_pendientes ?></span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           <?php echo $tab === 'aprobadas' ? 'active' : '' ?>" href="?accion=reservas&tab=aprobadas">
+                                Aprobadas <span class="badge bg-success"><?php echo $total_aprobadas ?></span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           <?php echo $tab === 'canceladas' ? 'active' : '' ?>" href="?accion=reservas&tab=canceladas">
+                                Canceladas <span class="badge bg-danger"><?php echo $total_canceladas ?></span>
+                            </a>
+                        </li>
+                    </ul>
 
-                    <!-- Reservas Aprobadas -->
-                    <div class="card shadow-sm">
-                        <div class="card-header bg-success text-white">
-                            <h5 class="mb-0">Reservas Aprobadas</h5>
-                        </div>
-                        <div class="card-body">
-                            <?php if (count($reservas_aprobadas) > 0): ?>
-                                <div class="table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Usuario</th>
-                                                <th>Habitación</th>
-                                                <th>Camas</th>
-                                                <th>Entrada</th>
-                                                <th>Salida</th>
-                                                <th>Días</th>
-                                                <th>Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($reservas_aprobadas as $reserva):
-                                                    $dias            = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
-                                                    $es_especial     = empty($reserva['nombre']);                        // Si no hay usuario, es reserva especial
-                                                    $es_todo_refugio = $es_especial && empty($reserva['id_habitacion']); // NULL = TODO EL REFUGIO
-                                                ?>
-												                                                <tr>
-												                                                    <td><?php echo $reserva['id'] ?></td>
-												                                                    <td>
-												                                                        <?php if ($es_especial): ?>
-												                                                            <strong class="text-primary"><i class="bi bi-calendar-event"></i> RESERVA ESPECIAL</strong><br>
-												                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['observaciones']) ?></small>
-												                                                        <?php else: ?>
-				                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
-				                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['num_socio']) ?></small>
-				                                                        <?php endif; ?>
-				                                                    </td>
-				                                                    <td>
-				                                                        <?php if ($es_todo_refugio): ?>
-				                                                            <strong class="text-success"><i class="bi bi-building"></i> TODO</strong>
-				                                                        <?php else: ?>
-				                                                            Hab.<?php echo $reserva['habitacion_numero'] ?>
-				                                                        <?php endif; ?>
-				                                                    </td>
-				                                                    <td>Cama				                                                            				                                                            				                                                            				                                                            				                                                            				                                                            				                                                            				                                                            				                                                            			                                                            		                                                             <?php echo $reserva['camas_numeros'] ?? $reserva['numero_camas'] . ' camas' ?></td>
-				                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-				                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-				                                                    <td><?php echo $dias ?> días</td>
-				                                                    <td>
-				                                                        <button type="button" class="btn btn-sm btn-primary me-1" title="Editar reserva" onclick="editarReserva(<?php echo htmlspecialchars(json_encode($reserva)) ?>)">
-				                                                            <i class="bi bi-pencil"></i>
-				                                                        </button>
-				                                                        <form method="post" class="d-inline" onsubmit="return confirm('¿Estás seguro de cancelar esta reserva?');">
-				                                                            <input type="hidden" name="accion" value="cancelar_reserva_admin">
-				                                                            <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-				                                                            <button type="submit" class="btn btn-sm btn-danger" title="Cancelar reserva">
-				                                                                <i class="bi bi-x-circle"></i>
-				                                                            </button>
-				                                                        </form>
-				                                                    </td>
-				                                                </tr>
-				                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
+                    <?php if ($tab === 'pendientes'): ?>
+                        <!-- Reservas Pendientes -->
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Reservas Pendientes</h5>
+                                <div class="d-flex gap-2">
+                                    <form class="d-flex gap-2" method="get">
+                                        <input type="hidden" name="accion" value="reservas">
+                                        <input type="hidden" name="tab" value="pendientes">
+                                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Buscar..." value="<?php echo htmlspecialchars($search) ?>">
+                                        <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                                            <option value="fecha_creacion"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Más recientes</option>
+                                            <option value="fecha_inicio"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
+                                            <option value="nombre"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
+                                        </select>
+                                        <button type="submit" class="btn btn-light btn-sm"><i class="bi bi-search"></i></button>
+                                    </form>
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="accion" value="export_csv">
+                                        <input type="hidden" name="tipo_reserva" value="pendiente">
+                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
+                                        <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-download"></i> CSV</button>
+                                    </form>
                                 </div>
-                            <?php else: ?>
-                                <p class="text-center text-muted py-4">No hay reservas aprobadas</p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-
-                    <!-- Reservas Canceladas -->
-                    <div class="card shadow-sm mt-4">
-                        <div class="card-header bg-danger text-white">
-                            <h5 class="mb-0">Reservas Canceladas</h5>
-                        </div>
-                        <div class="card-body">
-                            <?php if (count($reservas_canceladas) > 0): ?>
-                                <div class="table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Usuario</th>
-                                                <th>Habitación</th>
-                                                <th>Camas</th>
-                                                <th>Entrada</th>
-                                                <th>Salida</th>
-                                                <th>Días</th>
-                                                <th>Cancelada</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($reservas_canceladas as $reserva):
-                                                    $dias            = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
-                                                    $es_especial     = empty($reserva['nombre']);                        // Si no hay usuario, es reserva especial
-                                                    $es_todo_refugio = $es_especial && empty($reserva['id_habitacion']); // NULL = TODO EL REFUGIO
-                                                ?>
-							                                                <tr class="table-secondary">
-							                                                    <td><?php echo $reserva['id'] ?></td>
-							                                                    <td>
-							                                                        <?php if ($es_especial): ?>
-							                                                            <strong class="text-primary"><i class="bi bi-calendar-event"></i> RESERVA ESPECIAL</strong><br>
-							                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['observaciones']) ?></small>
-							                                                        <?php else: ?>
-                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
-                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['num_socio']) ?></small>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                    <td>
-                                                        <?php if ($es_todo_refugio): ?>
-                                                            <strong class="text-success"><i class="bi bi-building"></i> TODO</strong>
-                                                        <?php else: ?>
-                                                            Hab.<?php echo $reserva['habitacion_numero'] ?>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                    <td><?php echo $reserva['camas_numeros'] ?? $reserva['numero_camas'] . ' camas' ?></td>
-                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-                                                    <td><?php echo $dias ?> días</td>
-                                                    <td>
-                                                        <small class="text-muted">
-                                                            <?php echo date('d/m/Y', strtotime($reserva['fecha_creacion'])) ?>
-                                                        </small>
-                                                    </td>
+                            </div>
+                            <div class="card-body">
+                                <?php if (count($reservas_pendientes) > 0): ?>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>ID</th>
+                                                    <th>Usuario</th>
+                                                    <th>Habitación</th>
+                                                    <th>Camas</th>
+                                                    <th>Entrada</th>
+                                                    <th>Salida</th>
+                                                    <th>Acciones</th>
                                                 </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php else: ?>
-                                <p class="text-center text-muted py-4">No hay reservas canceladas</p>
-                            <?php endif; ?>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($reservas_pendientes as $reserva): ?>
+                                                    <tr>
+                                                        <td><?php echo $reserva['id'] ?></td>
+                                                        <td>
+                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
+                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['email']) ?></small>
+                                                        </td>
+                                                        <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
+                                                        <td><?php echo $reserva['numero_camas'] ?></td>
+                                                        <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+                                                        <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+                                                        <td>
+                                                            <form method="post" class="d-inline">
+                                                                <input type="hidden" name="accion" value="aprobar_reserva">
+                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
+                                                                <button type="submit" class="btn btn-sm btn-success" title="Aprobar"><i class="bi bi-check-lg"></i></button>
+                                                            </form>
+                                                            <form method="post" class="d-inline">
+                                                                <input type="hidden" name="accion" value="rechazar_reserva">
+                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
+                                                                <button type="submit" class="btn btn-sm btn-danger" title="Rechazar" onclick="return confirm('¿Rechazar reserva?')"><i class="bi bi-x-lg"></i></button>
+                                                            </form>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <!-- Paginación -->
+                                    <?php if ($paginas_pendientes > 1): ?>
+                                        <nav>
+                                            <ul class="pagination justify-content-center">
+                                                <?php for ($i = 1; $i <= $paginas_pendientes; $i++): ?>
+                                                    <li class="page-item<?php echo $page === $i ? 'active' : '' ?>">
+                                                        <a class="page-link" href="?accion=reservas&tab=pendientes&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>"><?php echo $i ?></a>
+                                                    </li>
+                                                <?php endfor; ?>
+                                            </ul>
+                                        </nav>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <p class="text-center text-muted py-4">No hay reservas pendientes</p>
+                                <?php endif; ?>
+                            </div>
                         </div>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
 
-    <!-- Modal para Crear Reserva para Socio -->
-    <div class="modal fade" id="modalReservaSocio" tabindex="-1" aria-labelledby="modalReservaSocioLabel" aria-hidden="true">
+                    <?php elseif ($tab === 'aprobadas'): ?>
+                        <!-- Reservas Aprobadas -->
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Reservas Aprobadas</h5>
+                                <div class="d-flex gap-2">
+                                    <form class="d-flex gap-2" method="get">
+                                        <input type="hidden" name="accion" value="reservas">
+                                        <input type="hidden" name="tab" value="aprobadas">
+                                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Buscar..." value="<?php echo htmlspecialchars($search) ?>">
+                                        <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                                            <option value="fecha_creacion"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Más recientes</option>
+                                            <option value="fecha_inicio"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
+                                            <option value="nombre"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
+                                        </select>
+                                        <button type="submit" class="btn btn-light btn-sm"><i class="bi bi-search"></i></button>
+                                    </form>
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="accion" value="export_csv">
+                                        <input type="hidden" name="tipo_reserva" value="reservada">
+                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
+                                        <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-download"></i> CSV</button>
+                                    </form>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <?php if (count($reservas_aprobadas) > 0): ?>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>ID</th>
+                                                    <th>Usuario</th>
+                                                    <th>Habitación</th>
+                                                    <th>Camas</th>
+                                                    <th>Entrada</th>
+                                                    <th>Salida</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($reservas_aprobadas as $reserva): ?>
+                                                    <tr>
+                                                        <td><?php echo $reserva['id'] ?></td>
+                                                        <td>
+                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] ? ($reserva['nombre'] . ' ' . $reserva['apellido1']) : $reserva['observaciones']) ?></strong><br>
+                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?></small>
+                                                        </td>
+                                                        <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
+                                                        <td><?php echo $reserva['numero_camas'] ?></td>
+                                                        <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+                                                        <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+                                                        <td>
+                                                            <button class="btn btn-sm btn-warning" onclick='editarReserva(<?php echo json_encode($reserva) ?>)' title="Editar">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
+                                                            <form method="post" class="d-inline">
+                                                                <input type="hidden" name="accion" value="cancelar_reserva_admin">
+                                                                <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
+                                                                <button type="submit" class="btn btn-sm btn-danger" title="Cancelar" onclick="return confirm('¿Cancelar esta reserva?')"><i class="bi bi-x-circle"></i></button>
+                                                            </form>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <!-- Paginación -->
+                                    <?php if ($paginas_aprobadas > 1): ?>
+                                        <nav>
+                                            <ul class="pagination justify-content-center">
+                                                <?php for ($i = 1; $i <= $paginas_aprobadas; $i++): ?>
+                                                    <li class="page-item<?php echo $page === $i ? 'active' : '' ?>">
+                                                        <a class="page-link" href="?accion=reservas&tab=aprobadas&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>"><?php echo $i ?></a>
+                                                    </li>
+                                                <?php endfor; ?>
+                                            </ul>
+                                        </nav>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <p class="text-center text-muted py-4">No hay reservas aprobadas</p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                    <?php elseif ($tab === 'canceladas'): ?>
+                        <!-- Reservas Canceladas -->
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Reservas Canceladas</h5>
+                                <div class="d-flex gap-2">
+                                    <form class="d-flex gap-2" method="get">
+                                        <input type="hidden" name="accion" value="reservas">
+                                        <input type="hidden" name="tab" value="canceladas">
+                                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Buscar..." value="<?php echo htmlspecialchars($search) ?>">
+                                        <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                                            <option value="fecha_creacion"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Más recientes</option>
+                                            <option value="fecha_inicio"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
+                                            <option value="nombre"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
+                                        </select>
+                                        <button type="submit" class="btn btn-light btn-sm"><i class="bi bi-search"></i></button>
+                                    </form>
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="accion" value="export_csv">
+                                        <input type="hidden" name="tipo_reserva" value="cancelada">
+                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
+                                        <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-download"></i> CSV</button>
+                                    </form>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <?php if (count($reservas_canceladas) > 0): ?>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>ID</th>
+                                                    <th>Usuario</th>
+                                                    <th>Habitación</th>
+                                                    <th>Camas</th>
+                                                    <th>Entrada</th>
+                                                    <th>Salida</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($reservas_canceladas as $reserva): ?>
+                                                    <tr>
+                                                        <td><?php echo $reserva['id'] ?></td>
+                                                        <td>
+                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] ? ($reserva['nombre'] . ' ' . $reserva['apellido1']) : $reserva['observaciones']) ?></strong><br>
+                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?></small>
+                                                        </td>
+                                                        <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
+                                                        <td><?php echo $reserva['numero_camas'] ?></td>
+                                                        <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+                                                        <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <!-- Paginación -->
+                                    <?php if ($paginas_canceladas > 1): ?>
+                                        <nav>
+                                            <ul class="pagination justify-content-center">
+                                                <?php for ($i = 1; $i <= $paginas_canceladas; $i++): ?>
+                                                    <li class="page-item<?php echo $page === $i ? 'active' : '' ?>">
+                                                        <a class="page-link" href="?accion=reservas&tab=canceladas&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>"><?php echo $i ?></a>
+                                                    </li>
+                                                <?php endfor; ?>
+                                            </ul>
+                                        </nav>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <p class="text-center text-muted py-4">No hay reservas canceladas</p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Modal para Crear Reserva Socio -->
+                    <div class="modal fade" id="modalReservaSocio" tabindex="-1" aria-labelledby="modalReservaSocioLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
@@ -1178,7 +1433,7 @@
                                     $habitaciones = obtener_todas_habitaciones($conexionPDO);
                                 foreach ($habitaciones as $hab): ?>
                                     <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
-                                        Habitación                                                                                                       <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
+                                        Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -1259,7 +1514,7 @@
                                 </option>
                                 <?php foreach ($habitaciones as $hab): ?>
                                     <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
-                                        Habitación                                                                                                                                                                                                                                                                                                                                                                      <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
+                                        Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -1445,7 +1700,7 @@
                                     $habitaciones = obtener_todas_habitaciones($conexionPDO);
                                 foreach ($habitaciones as $hab): ?>
                                     <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
-                                        Habitación                                                                                                                                                                                                             <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
+                                        Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -1566,7 +1821,12 @@
             }
         });
     </script>
+    <?php endif; ?>
+    </div> <!-- End col-md-10 -->
+    </div> <!-- End row -->
+    </div> <!-- End container-fluid -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+

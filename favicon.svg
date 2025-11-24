@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Fondo circular -->
+  <circle cx="50" cy="50" r="50" fill="#2563eb"/>
+  
+  <!-- Montañas -->
+  <path d="M 20 70 L 40 35 L 60 70 Z" fill="#ffffff" opacity="0.9"/>
+  <path d="M 45 70 L 65 40 L 85 70 Z" fill="#ffffff" opacity="0.7"/>
+  
+  <!-- Refugio/Casa -->
+  <rect x="38" y="55" width="24" height="15" fill="#dc2626"/>
+  <path d="M 36 55 L 50 45 L 64 55 Z" fill="#991b1b"/>
+  
+  <!-- Puerta -->
+  <rect x="46" y="60" width="8" height="10" fill="#7f1d1d"/>
+</svg>

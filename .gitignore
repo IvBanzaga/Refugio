@@ -46,3 +46,7 @@ package-lock.json
 
 # Scripts de actualización (después de ejecutar)
 update_passwords.php
+
+actualizacion/
+instrucciones/
+sql/

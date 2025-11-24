@@ -45,6 +45,8 @@
 
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏔️</text></svg>">
   <title>Acceso a la aplicación</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -52,7 +54,7 @@
 <body class="bg-light">
   <div class="container py-5">
     <div class="row justify-content-center">
-      <div class="col-md-5">
+      <div class="col-12 col-sm-10 col-md-6 col-lg-5">
         <div class="card shadow">
           <div class="card-header bg-primary text-white text-center">
             <h2>🏔️ Refugio del Club</h2>
@@ -79,7 +81,7 @@
             <div class="mt-3 text-muted text-center small">
               <p class="mb-0">Usuario de prueba Admin: admin@hostel.com</p>
               <p class="mb-0">Usuario de prueba User: user1@mail.com</p>
-              <p class="mb-0">Contraseña para ambos: admin123 o user123</p>
+              <p class="mb-0">Contraseña : admin123 o user123</p>
             </div>
           </div>
         </div>

@@ -160,6 +160,203 @@ function eliminar_usuario($conexion, $id)
     }
 }
 
+/**
+ * Listar usuarios con paginación, búsqueda y ordenación
+ * @param PDO $conexion
+ * @param array $filtros (page, limit, search, order_by, order_dir)
+ * @return array
+ */
+function listar_usuarios_paginado($conexion, $filtros = [])
+{
+    try {
+        $page      = $filtros['page'] ?? 1;
+        $limit     = $filtros['limit'] ?? 10;
+        $offset    = ($page - 1) * $limit;
+        $search    = $filtros['search'] ?? '';
+        $order_by  = $filtros['order_by'] ?? 'num_socio';
+        $order_dir = $filtros['order_dir'] ?? 'ASC';
+
+        // Validar columnas de ordenación
+        $valid_columns = ['num_socio', 'nombre', 'email', 'dni', 'rol'];
+        if (! in_array($order_by, $valid_columns)) {
+            $order_by = 'num_socio';
+        }
+
+        // Validar dirección de ordenación
+        $order_dir = strtoupper($order_dir) === 'DESC' ? 'DESC' : 'ASC';
+
+        // Construir query base
+        $sql = "SELECT id, num_socio, dni, telf, email, nombre, apellido1, apellido2, rol
+                FROM usuarios
+                WHERE 1=1";
+
+        $params = [];
+
+        // Agregar búsqueda si existe
+        if (! empty($search)) {
+            $sql .= " AND (
+                nombre LIKE :search
+                OR apellido1 LIKE :search
+                OR apellido2 LIKE :search
+                OR email LIKE :search
+                OR dni LIKE :search
+                OR num_socio LIKE :search
+            )";
+            $params[':search'] = '%' . $search . '%';
+        }
+
+        // Agregar ordenación
+        $sql .= " ORDER BY $order_by $order_dir";
+
+        // Agregar paginación
+        $sql .= " LIMIT :limit OFFSET :offset";
+
+        $stmt = $conexion->prepare($sql);
+
+        // Bind parámetros de búsqueda
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        // Bind parámetros de paginación
+        $stmt->bindValue(':limit', (int) $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int) $offset, PDO::PARAM_INT);
+
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al listar usuarios paginados: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Contar total de usuarios con filtros
+ * @param PDO $conexion
+ * @param array $filtros (search)
+ * @return int
+ */
+function contar_usuarios($conexion, $filtros = [])
+{
+    try {
+        $search = $filtros['search'] ?? '';
+
+        $sql    = "SELECT COUNT(*) as total FROM usuarios WHERE 1=1";
+        $params = [];
+
+        // Agregar búsqueda si existe
+        if (! empty($search)) {
+            $sql .= " AND (
+                nombre LIKE :search
+                OR apellido1 LIKE :search
+                OR apellido2 LIKE :search
+                OR email LIKE :search
+                OR dni LIKE :search
+                OR num_socio LIKE :search
+            )";
+            $params[':search'] = '%' . $search . '%';
+        }
+
+        $stmt = $conexion->prepare($sql);
+
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        $stmt->execute();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int) $result['total'];
+    } catch (PDOException $e) {
+        error_log("Error al contar usuarios: " . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * Exportar usuarios a CSV
+ * @param PDO $conexion
+ * @param array $filtros (search, order_by, order_dir)
+ * @return void
+ */
+function export_usuarios_csv($conexion, $filtros = [])
+{
+    try {
+        $search    = $filtros['search'] ?? '';
+        $order_by  = $filtros['order_by'] ?? 'num_socio';
+        $order_dir = $filtros['order_dir'] ?? 'ASC';
+
+        // Validar columnas de ordenación
+        $valid_columns = ['num_socio', 'nombre', 'email', 'dni', 'rol'];
+        if (! in_array($order_by, $valid_columns)) {
+            $order_by = 'num_socio';
+        }
+
+        $order_dir = strtoupper($order_dir) === 'DESC' ? 'DESC' : 'ASC';
+
+        $sql = "SELECT num_socio, nombre, apellido1, apellido2, dni, email, telf, rol
+                FROM usuarios
+                WHERE 1=1";
+
+        $params = [];
+
+        if (! empty($search)) {
+            $sql .= " AND (
+                nombre LIKE :search
+                OR apellido1 LIKE :search
+                OR apellido2 LIKE :search
+                OR email LIKE :search
+                OR dni LIKE :search
+                OR num_socio LIKE :search
+            )";
+            $params[':search'] = '%' . $search . '%';
+        }
+
+        $sql .= " ORDER BY $order_by $order_dir";
+
+        $stmt = $conexion->prepare($sql);
+
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        $stmt->execute();
+        $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Configurar headers para descarga CSV
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="usuarios_' . date('Y-m-d_H-i-s') . '.csv"');
+
+        // Crear output stream
+        $output = fopen('php://output', 'w');
+
+        // BOM para UTF-8
+        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+        // Escribir encabezados
+        fputcsv($output, ['Nº Socio', 'Nombre', 'Apellido 1', 'Apellido 2', 'DNI', 'Email', 'Teléfono', 'Rol'], ';');
+
+        // Escribir datos
+        foreach ($usuarios as $usuario) {
+            fputcsv($output, [
+                $usuario['num_socio'],
+                $usuario['nombre'],
+                $usuario['apellido1'],
+                $usuario['apellido2'],
+                $usuario['dni'],
+                $usuario['email'],
+                $usuario['telf'],
+                strtoupper($usuario['rol']),
+            ], ';');
+        }
+
+        fclose($output);
+        exit;
+    } catch (PDOException $e) {
+        error_log("Error al exportar usuarios CSV: " . $e->getMessage());
+        die("Error al exportar CSV");
+    }
+}
+
 /* ==================================================
    FUNCIONES DE HABITACIONES Y CAMAS
    ================================================== */
@@ -293,7 +490,6 @@ function obtener_camas_disponibles($conexion, $id_habitacion, $fecha_inicio, $fe
         $sql = "
             SELECT id, numero FROM camas
             WHERE id_habitacion = :id_habitacion
-            AND estado = 'libre'
             AND id NOT IN (
                 SELECT DISTINCT c.id
                 FROM camas c
@@ -423,6 +619,12 @@ function obtener_habitaciones_disponibles($conexion, $fecha_inicio, $fecha_fin)
  * @param array $filtros (estado, id_usuario, fecha_inicio, fecha_fin)
  * @return array
  */
+/**
+ * Listar reservas (con filtros, paginación, ordenamiento y búsqueda)
+ * @param PDO $conexion
+ * @param array $filtros (estado, id_usuario, fecha_inicio, fecha_fin, limit, offset, order_by, order_dir, search)
+ * @return array
+ */
 function listar_reservas($conexion, $filtros = [])
 {
     try {
@@ -442,6 +644,7 @@ function listar_reservas($conexion, $filtros = [])
 
         $params = [];
 
+        // Filtros básicos
         if (isset($filtros['estado'])) {
             $sql .= " AND r.estado = :estado";
             $params[':estado'] = $filtros['estado'];
@@ -462,12 +665,45 @@ function listar_reservas($conexion, $filtros = [])
             $params[':fecha_fin'] = $filtros['fecha_fin'];
         }
 
-        $sql .= " GROUP BY r.id ORDER BY r.fecha_creacion DESC";
+        // Búsqueda
+        if (! empty($filtros['search'])) {
+            $searchTerm = '%' . $filtros['search'] . '%';
+            $sql .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search)";
+            $params[':search'] = $searchTerm;
+        }
+
+        $sql .= " GROUP BY r.id";
+
+        // Ordenamiento
+        $allowed_sort_cols = ['fecha_inicio', 'fecha_fin', 'fecha_creacion', 'nombre'];
+        $order_by          = in_array($filtros['order_by'] ?? '', $allowed_sort_cols) ? $filtros['order_by'] : 'fecha_creacion';
+
+        // Mapeo especial para columnas de otras tablas
+        if ($order_by === 'nombre') {
+            $order_by = 'u.nombre';
+        } else {
+            $order_by = 'r.' . $order_by;
+        }
+
+        $order_dir = strtoupper($filtros['order_dir'] ?? '') === 'ASC' ? 'ASC' : 'DESC';
+        $sql .= " ORDER BY $order_by $order_dir";
+
+        // Paginación
+        if (isset($filtros['limit']) && isset($filtros['offset'])) {
+            $sql .= " LIMIT :limit OFFSET :offset";
+            // PDO limit/offset must be integers
+            $params[':limit']  = (int) $filtros['limit'];
+            $params[':offset'] = (int) $filtros['offset'];
+        }
 
         $stmt = $conexion->prepare($sql);
 
         foreach ($params as $key => $value) {
-            $stmt->bindValue($key, $value);
+            if ($key === ':limit' || $key === ':offset') {
+                $stmt->bindValue($key, $value, PDO::PARAM_INT);
+            } else {
+                $stmt->bindValue($key, $value);
+            }
         }
 
         $stmt->execute();
@@ -475,6 +711,52 @@ function listar_reservas($conexion, $filtros = [])
     } catch (PDOException $e) {
         error_log("Error al listar reservas: " . $e->getMessage());
         return [];
+    }
+}
+
+/**
+ * Contar total de reservas con filtros (para paginación)
+ * @param PDO $conexion
+ * @param array $filtros
+ * @return int
+ */
+function contar_reservas($conexion, $filtros = [])
+{
+    try {
+        $sql = "
+            SELECT COUNT(DISTINCT r.id) as total
+            FROM reservas r
+            LEFT JOIN usuarios u ON r.id_usuario = u.id
+            WHERE 1=1
+        ";
+
+        $params = [];
+
+        if (isset($filtros['estado'])) {
+            $sql .= " AND r.estado = :estado";
+            $params[':estado'] = $filtros['estado'];
+        }
+
+        if (isset($filtros['id_usuario'])) {
+            $sql .= " AND r.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $filtros['id_usuario'];
+        }
+
+        if (! empty($filtros['search'])) {
+            $searchTerm = '%' . $filtros['search'] . '%';
+            $sql .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search)";
+            $params[':search'] = $searchTerm;
+        }
+
+        $stmt = $conexion->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+        return (int) $stmt->fetchColumn();
+    } catch (PDOException $e) {
+        error_log("Error al contar reservas: " . $e->getMessage());
+        return 0;
     }
 }
 
@@ -539,7 +821,6 @@ function crear_reserva_para_socio($conexion, $datos)
         $stmt = $conexion->prepare("
             SELECT id FROM camas
             WHERE id_habitacion = :id_habitacion
-            AND estado = 'libre'
             AND id NOT IN (
                 SELECT DISTINCT c.id
                 FROM camas c
@@ -612,88 +893,78 @@ function crear_reserva_para_socio($conexion, $datos)
  */
 function crear_reserva($conexion, $datos)
 {
-    try {
-        $conexion->beginTransaction();
-
-        // Validar número de camas
-        $numero_camas = isset($datos['numero_camas']) ? (int) $datos['numero_camas'] : 1;
-        if ($numero_camas < 1) {
-            throw new Exception("Debes reservar al menos 1 cama");
-        }
-
-        // Buscar camas disponibles en la habitación
-        $stmt = $conexion->prepare("
-            SELECT id FROM camas
-            WHERE id_habitacion = :id_habitacion
-            AND estado = 'libre'
-            AND id NOT IN (
-                SELECT DISTINCT c.id
-                FROM camas c
-                INNER JOIN reservas_camas rc ON c.id = rc.id_cama
-                INNER JOIN reservas r ON rc.id_reserva = r.id
-                WHERE c.id_habitacion = :id_habitacion
-                AND r.estado IN ('pendiente', 'reservada')
-                AND (
-                    (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
-                )
-            )
-            ORDER BY numero
-            LIMIT :numero_camas
-        ");
-
-        $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
-        $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
-        $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
-        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
-        $stmt->execute();
-
-        $camas_disponibles = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-        if (count($camas_disponibles) < $numero_camas) {
-            throw new Exception("No hay suficientes camas disponibles en esta habitación");
-        }
-
-        // Insertar reserva
-        $stmt = $conexion->prepare("
-            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado)
-            VALUES (:id_usuario, :id_habitacion, :numero_camas, :fecha_inicio, :fecha_fin, 'pendiente')
-        ");
-
-        $stmt->bindParam(':id_usuario', $datos['id_usuario'], PDO::PARAM_INT);
-        $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
-        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
-        $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
-        $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
-
-        $stmt->execute();
-        $id_reserva = $conexion->lastInsertId();
-
-        // Crear relación entre reserva y camas asignadas
-        $stmt_cama = $conexion->prepare("
-            INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)
-        ");
-
-        // Actualizar estado de las camas asignadas
-        $stmt_update = $conexion->prepare("UPDATE camas SET estado = 'pendiente' WHERE id = :id_cama");
-
-        foreach ($camas_disponibles as $id_cama) {
-            // Crear relación (necesitaremos crear esta tabla)
-            $stmt_cama->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
-            $stmt_cama->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
-            $stmt_cama->execute();
-
-            // Actualizar estado de la cama
-            $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
-            $stmt_update->execute();
-        }
-
-        $conexion->commit();
-        return $id_reserva;
-    } catch (Exception $e) {
-        $conexion->rollBack();
-        error_log("Error al crear reserva: " . $e->getMessage());
-        return false;
+    // Validar número de camas
+    $numero_camas = isset($datos['numero_camas']) ? (int) $datos['numero_camas'] : 1;
+    if ($numero_camas < 1) {
+        throw new Exception("Debes reservar al menos 1 cama");
     }
+
+    // Buscar camas disponibles en la habitación
+    $stmt = $conexion->prepare("
+        SELECT id FROM camas
+        WHERE id_habitacion = :id_habitacion
+        AND id NOT IN (
+            SELECT DISTINCT c.id
+            FROM camas c
+            INNER JOIN reservas_camas rc ON c.id = rc.id_cama
+            INNER JOIN reservas r ON rc.id_reserva = r.id
+            WHERE c.id_habitacion = :id_habitacion
+            AND r.estado IN ('pendiente', 'reservada')
+            AND (
+                (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+            )
+        )
+        ORDER BY numero
+        LIMIT :numero_camas
+    ");
+
+    $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+    $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+    $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+    $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $camas_disponibles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (count($camas_disponibles) < $numero_camas) {
+        throw new Exception("No hay suficientes camas disponibles en esta habitación");
+    }
+
+    // Insertar reserva
+    $stmt = $conexion->prepare("
+        INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado)
+        VALUES (:id_usuario, :id_habitacion, :numero_camas, :fecha_inicio, :fecha_fin, 'pendiente')
+    ");
+
+    $stmt->bindParam(':id_usuario', $datos['id_usuario'], PDO::PARAM_INT);
+    $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+    $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+    $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+    $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+
+    $stmt->execute();
+    $id_reserva = $conexion->lastInsertId();
+
+    // Crear relación entre reserva y camas asignadas
+    $stmt_cama = $conexion->prepare("
+        INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)
+    ");
+
+    // Actualizar estado de las camas asignadas
+    $stmt_update = $conexion->prepare("UPDATE camas SET estado = 'pendiente' WHERE id = :id_cama");
+
+    foreach ($camas_disponibles as $id_cama) {
+        // Crear relación
+        $stmt_cama->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+        $stmt_cama->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+        $stmt_cama->execute();
+
+        // Actualizar estado de la cama
+        $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+        $stmt_update->execute();
+    }
+
+    return $id_reserva;
 }
 
 /**
@@ -951,62 +1222,6 @@ function actualizar_estado_reserva($conexion, $id, $estado)
  * @param string $fecha_inicio
  * @param string $fecha_fin
  * @param int $id_habitacion
- * @param int $numero_camas
- * @return bool
- */
-function editar_reserva_usuario($conexion, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)
-{
-    try {
-        $conexion->beginTransaction();
-
-        // Actualizar datos básicos de la reserva
-        $stmt = $conexion->prepare("
-            UPDATE reservas
-            SET fecha_inicio = :fecha_inicio,
-                fecha_fin = :fecha_fin,
-                id_habitacion = :id_habitacion,
-                numero_camas = :numero_camas
-            WHERE id = :id
-        ");
-        $stmt->bindParam(':fecha_inicio', $fecha_inicio);
-        $stmt->bindParam(':fecha_fin', $fecha_fin);
-        $stmt->bindParam(':id_habitacion', $id_habitacion, PDO::PARAM_INT);
-        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
-        $stmt->bindParam(':id', $id_reserva, PDO::PARAM_INT);
-        $stmt->execute();
-
-        // Eliminar asignaciones anteriores de camas
-        $stmt = $conexion->prepare("DELETE FROM reservas_camas WHERE id_reserva = :id_reserva");
-        $stmt->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
-        $stmt->execute();
-
-        // Obtener camas disponibles de la nueva habitación
-        $camas_disponibles = obtener_camas_disponibles($conexion, $id_habitacion, $fecha_inicio, $fecha_fin, $id_reserva);
-
-        if (count($camas_disponibles) < $numero_camas) {
-            throw new Exception("No hay suficientes camas disponibles en la habitación seleccionada");
-        }
-
-        // Asignar nuevas camas
-        $stmt = $conexion->prepare("INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)");
-        for ($i = 0; $i < $numero_camas; $i++) {
-            $stmt->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
-            $stmt->bindParam(':id_cama', $camas_disponibles[$i]['id'], PDO::PARAM_INT);
-            $stmt->execute();
-        }
-
-        $conexion->commit();
-        return true;
-    } catch (Exception $e) {
-        $conexion->rollBack();
-        error_log("Error al editar reserva de usuario: " . $e->getMessage());
-        return false;
-    }
-}
-
-/**
- * Editar una reserva (solo admin)
- * @param PDO $conexion
  * @param int $id_reserva
  * @param string $fecha_inicio
  * @param string $fecha_fin
@@ -1014,6 +1229,57 @@ function editar_reserva_usuario($conexion, $id_reserva, $fecha_inicio, $fecha_fi
  * @param int $numero_camas
  * @return bool
  */
+/**
+ * Editar una reserva de usuario (solo reservas pendientes)
+ * @param PDO $conexion
+ * @param int $id_reserva
+ * @param string $fecha_inicio
+ * @param string $fecha_fin
+ * @param int $id_habitacion
+ * @param int $numero_camas
+ * @return bool
+ */
+function editar_reserva_usuario($conexion, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)
+{
+    // Actualizar datos básicos de la reserva
+    $stmt = $conexion->prepare("
+        UPDATE reservas
+        SET fecha_inicio = :fecha_inicio,
+            fecha_fin = :fecha_fin,
+            id_habitacion = :id_habitacion,
+            numero_camas = :numero_camas
+        WHERE id = :id
+    ");
+    $stmt->bindParam(':fecha_inicio', $fecha_inicio);
+    $stmt->bindParam(':fecha_fin', $fecha_fin);
+    $stmt->bindParam(':id_habitacion', $id_habitacion, PDO::PARAM_INT);
+    $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+    $stmt->bindParam(':id', $id_reserva, PDO::PARAM_INT);
+    $stmt->execute();
+
+    // Eliminar asignaciones anteriores de camas
+    $stmt = $conexion->prepare("DELETE FROM reservas_camas WHERE id_reserva = :id_reserva");
+    $stmt->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+    $stmt->execute();
+
+    // Obtener camas disponibles de la nueva habitación
+    $camas_disponibles = obtener_camas_disponibles($conexion, $id_habitacion, $fecha_inicio, $fecha_fin, $id_reserva);
+
+    if (count($camas_disponibles) < $numero_camas) {
+        throw new Exception("No hay suficientes camas disponibles en la habitación seleccionada");
+    }
+
+    // Asignar nuevas camas
+    $stmt = $conexion->prepare("INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)");
+    for ($i = 0; $i < $numero_camas; $i++) {
+        $stmt->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+        $stmt->bindParam(':id_cama', $camas_disponibles[$i]['id'], PDO::PARAM_INT);
+        $stmt->execute();
+    }
+
+    return true;
+}
+
 function editar_reserva_admin($conexion, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)
 {
     try {

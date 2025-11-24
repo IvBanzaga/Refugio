@@ -1,3 +1,33 @@
+# 🏔️ Sistema de Gestión de Reservas para Refugio de Montaña
+
+> **Aplicación web completa para la gestión eficiente de reservas de camas en refugios de montaña**
+
+## 📖 Descripción del Proyecto
+
+**Refugio** es un sistema integral de gestión de reservas diseñado específicamente para refugios de montaña y albergues. La aplicación permite a los administradores gestionar usuarios, habitaciones y reservas, mientras que los socios pueden consultar disponibilidad en tiempo real y realizar reservas de forma sencilla e intuitiva.
+
+### 🎯 Características Principales
+
+- 🔐 **Sistema de autenticación seguro** con roles diferenciados (Admin/Usuario)
+- 📅 **Calendario interactivo** que muestra disponibilidad de camas en tiempo real
+- 👥 **Gestión completa de usuarios** con perfiles de socios
+- 🛏️ **Control de habitaciones y camas** con estados de ocupación
+- ✅ **Flujo de aprobación de reservas** para administradores
+- 👨‍👩‍👧‍👦 **Gestión de acompañantes** (socios y no socios)
+- 📊 **Panel de administración** con estadísticas y métricas
+- 📱 **Diseño responsive** optimizado para móviles y tablets
+- 🔒 **Seguridad robusta** con contraseñas hasheadas y protección contra inyecciones SQL
+
+### 💡 ¿Para quién es este proyecto?
+
+Este sistema es ideal para:
+- Refugios de montaña que necesitan gestionar reservas de camas
+- Clubes de montaña con refugios propios
+- Albergues que requieren un sistema de reservas simple y eficiente
+- Organizaciones que gestionan espacios compartidos con sistema de socios
+
+---
+
 # 📋 RESUMEN DEL PROYECTO - SISTEMA DE CONTROL DE CAMAS
 
 ## ✅ Estado Actual del Proyecto
@@ -307,6 +337,34 @@ El proyecto cumple con todos los requisitos especificados:
 2. Configurar servidor HTTPS
 3. Revisar configuración de PostgreSQL
 4. Eliminar archivos de desarrollo
+
+## Licencia
+Licencia del proyecto (ej.: MIT). Añadir archivo LICENSE en el repositorio.
+
+## Autor
+
+### 👨‍💻 **Iván Bazaga**
+
+🚀 Desarrollador Frontend especializado en Angular y ecosistemas JavaScript
+
+Estudiante Intermedio con pasión por crear aplicaciones web modernas y eficientes. Este proyecto representa la aplicación práctica de conceptos avanzados.
+
+### ☎️ Información de Contacto
+
+| Plataforma | Enlace | Descripción |
+|------------|--------|-------------|
+| GitHub | [@IvBanzaga](https://github.com/IvBanzaga/) | Repositorios y proyectos de código |
+| LinkedIn | [Iván Bazaga](https://www.linkedin.com/in/ivan-bazaga-gonzalez/) | Perfil profesional y networking |
+| Email | [ivan.cpweb@gmail.com](mailto:ivan.cpweb@gmail.com) | Contacto directo para oportunidades |
+| Portfolio | [Ivancodelab.com](https://Ivancodelab.com) | Showcase de proyectos y skills |
+
+### 🧰 Stack Tecnológico de Especialización
+
+```
+Frontend: Java SprinBoot • Astro • Angular 20 • TypeScript • RxJS • Bootstrap 5 • HTML5 • CSS3
+Tools: Angular CLI • Git • VS Code • Prettier • Jasmine • Karma
+Learning: NgRx • PWA • Node.js • Express • Mysql •  Oracle
+```
 
 ---
 
