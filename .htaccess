@@ -1,0 +1,47 @@
+# 1. SEGURIDAD: Evitar listado de directorios
+# Si no hay index.php, no muestra la lista de archivos
+Options -Indexes
+
+# 2. SEGURIDAD: Proteger archivos y carpetas sensibles
+# Bloquear acceso a la carpeta .git, sql, y archivos de configuración
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Bloquear acceso directo a carpetas sensibles
+    RewriteRule ^(\.git|sql|includes|Instrucciones)/ - [F,L]
+    
+    # Bloquear acceso a archivos con extensiones sensibles (.sql, .log, .ini, etc)
+    RewriteRule \.(sql|log|ini|env|git)$ - [F,L]
+</IfModule>
+
+# 3. URLS LIMPIAS: Quitar extensión .php
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Si la petición no es un directorio ni un archivo existente
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    
+    # Y si existe el archivo con extensión .php
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    
+    # Reescribir la URL internamente a .php
+    RewriteRule ^([^\.]+)$ $1.php [NC,L]
+</IfModule>
+
+# 4. SEGURIDAD: Cabeceras extra (Opcional pero recomendado)
+<IfModule mod_headers.c>
+    # Evitar que la web se cargue en iframes de otros sitios (Clickjacking)
+    Header always append X-Frame-Options SAMEORIGIN
+    # Protección contra XSS básica del navegador
+    Header set X-XSS-Protection "1; mode=block"
+    # Evitar que el navegador adivine el tipo de contenido (MIME sniffing)
+    Header set X-Content-Type-Options nosniff
+</IfModule>
+
+# 5. FORZAR HTTPS (Descomentar si tienes certificado SSL instalado)
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>
