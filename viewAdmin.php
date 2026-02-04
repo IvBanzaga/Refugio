@@ -161,6 +161,20 @@
     // La función export_usuarios_csv hace exit, nunca llegará aquí
     }
 
+    // Procesar exportación de usuarios a PDF (GET)
+    if ($accion === 'export_usuarios_pdf' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $search = $_GET['search'] ?? '';
+    $sort   = $_GET['sort'] ?? 'num_socio';
+    $dir    = $_GET['dir'] ?? 'ASC';
+
+    export_usuarios_pdf($conexionPDO, [
+        'search'    => $search,
+        'order_by'  => $sort,
+        'order_dir' => $dir,
+    ]);
+    // La función export_usuarios_pdf hace exit, nunca llegará aquí
+    }
+
     // Procesar acciones de usuarios
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($accion) {
@@ -666,6 +680,11 @@
                 exit;
             }
             break;
+
+        case 'export_pdf':
+            $tipo_reserva = $_POST['tipo_reserva'] ?? 'pendiente';
+            export_reservas_pdf($conexionPDO, $tipo_reserva, $_POST);
+            exit;
 
         case 'export_csv':
             $tipo_reserva = $_POST['tipo_reserva'] ?? 'pendiente';
@@ -1413,8 +1432,12 @@
                                 </div>
                                 <div class="col-md-4 text-end">
                                     <a href="?accion=export_usuarios_csv&search=<?php echo urlencode($search_usuarios) ?>&sort=<?php echo urlencode($sort_usuarios) ?>&dir=<?php echo urlencode($order_dir_usuarios) ?>"
-                                       class="btn btn-success">
-                                        <i class="bi bi-file-earmark-spreadsheet"></i> Exportar CSV
+                                       class="btn btn-success me-2">
+                                        <i class="bi bi-file-earmark-spreadsheet"></i> CSV
+                                    </a>
+                                    <a href="?accion=export_usuarios_pdf&search=<?php echo urlencode($search_usuarios) ?>&sort=<?php echo urlencode($sort_usuarios) ?>&dir=<?php echo urlencode($order_dir_usuarios) ?>"
+                                       class="btn btn-danger">
+                                        <i class="bi bi-file-earmark-pdf"></i> PDF
                                     </a>
                                 </div>
                             </div>
@@ -1653,7 +1676,14 @@
                                         <input type="hidden" name="tipo_reserva" value="pendiente">
                                         <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
                                         <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
-                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-download"></i> CSV</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-file-earmark-spreadsheet"></i> CSV</button>
+                                    </form>
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="accion" value="export_pdf">
+                                        <input type="hidden" name="tipo_reserva" value="pendiente">
+                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
+                                        <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
+                                        <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
                                     </form>
                                 </div>
                             </div>
@@ -1770,7 +1800,14 @@
                                         <input type="hidden" name="tipo_reserva" value="reservada">
                                         <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
                                         <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
-                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-download"></i> CSV</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-file-earmark-spreadsheet"></i> CSV</button>
+                                    </form>
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="accion" value="export_pdf">
+                                        <input type="hidden" name="tipo_reserva" value="reservada">
+                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
+                                        <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
+                                        <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
                                     </form>
                                 </div>
                             </div>
@@ -1890,7 +1927,14 @@
                                         <input type="hidden" name="tipo_reserva" value="cancelada">
                                         <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
                                         <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
-                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-download"></i> CSV</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-file-earmark-spreadsheet"></i> CSV</button>
+                                    </form>
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="accion" value="export_pdf">
+                                        <input type="hidden" name="tipo_reserva" value="cancelada">
+                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search) ?>">
+                                        <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort) ?>">
+                                        <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
                                     </form>
                                 </div>
                             </div>
@@ -2046,37 +2090,24 @@
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Fecha Fin *</label>
                                 <input type="date" class="form-control" name="fecha_fin" required
-                                       id="fechaFinSocio" min="<?php echo date('Y-m-d'); ?>">
+                                       id="fechaFinSocio" min="<?php echo date('Y-m-d'); ?>"
+                                       onchange="actualizarDisponibilidadSocio()">
                             </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Habitación *</label>
-                            <select class="form-select" name="id_habitacion" required id="selectHabitacionSocio">
-                                <option value="">Seleccione una habitación</option>
-                                <?php
-                                    $habitaciones = obtener_todas_habitaciones($conexionPDO);
-                                foreach ($habitaciones as $hab): ?>
-                                    <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
-                                        Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label">Número de Camas *</label>
                             <div class="input-group">
-                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasSocio(-1)">
+                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasSocio(-1)" id="btnDecrementarSocio" disabled>
                                     <i class="bi bi-dash"></i>
                                 </button>
-                                <input type="number" class="form-control text-center" name="numero_camas"
-                                       id="numeroCamasSocio" value="1" min="1" required readonly>
-                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasSocio(1)">
+                                <input type="number" class="form-control text-center" name="num_camas"
+                                       id="numeroCamasSocio" value="1" min="1" max="26" required readonly>
+                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasSocio(1)" id="btnIncrementarSocio" disabled>
                                     <i class="bi bi-plus"></i>
                                 </button>
                             </div>
-                            <small class="text-muted" id="infoCamasSocio">Selecciona una habitación primero</small>
+                            <small class="text-muted" id="infoCamasSocio">Selecciona las fechas para ver disponibilidad</small>
                         </div>
 
                         <div class="mb-3">

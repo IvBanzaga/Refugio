@@ -482,17 +482,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																														                                            SELECT r.id, r.estado, h.numero as habitacion,
-																														                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																														                                            FROM reservas r
-																														                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																														                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																														                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																														                                            WHERE r.id_usuario = :id_usuario
-																														                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																														                                            AND r.estado IN ('pendiente', 'reservada')
-																														                                            GROUP BY r.id, r.estado, h.numero
-																														                                        ");
+																															                                            SELECT r.id, r.estado, h.numero as habitacion,
+																															                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																															                                            FROM reservas r
+																															                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																															                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																															                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																															                                            WHERE r.id_usuario = :id_usuario
+																															                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																															                                            AND r.estado IN ('pendiente', 'reservada')
+																															                                            GROUP BY r.id, r.estado, h.numero
+																															                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -500,11 +500,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																														                                            SELECT COUNT(*) as total
-																														                                            FROM reservas
-																														                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																														                                            AND estado = 'reservada'
-																														                                        ");
+																															                                            SELECT COUNT(*) as total
+																															                                            FROM reservas
+																															                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																															                                            AND estado = 'reservada'
+																															                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -569,7 +569,7 @@
 
                     <form method="post" id="formReserva">
                         <input type="hidden" name="accion" value="crear_reserva">
-                        <input type="hidden" name="numero_camas" id="numeroCamasInput" value="1">
+                        <input type="hidden" name="num_camas" id="hiddenNumCamas" value="1">
 
                         <div class="card shadow-sm mb-4">
                             <div class="card-header bg-success text-white">
@@ -590,17 +590,8 @@
                                             value="<?php echo isset($_GET['fecha_fin']) ? htmlspecialchars($_GET['fecha_fin']) : '' ?>">
                                     </div>
                                     <div class="col-md-4">
-                                        <label class="form-label">Habitación *</label>
-                                        <select name="id_habitacion" id="selectHabitacion" class="form-select" required
-                                            onchange="habilitarSelectorCamas()">
-                                            <option value="">Seleccione primero las fechas</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="row mt-3">
-                                    <div class="col-12">
                                         <label class="form-label">Número de Camas *</label>
-                                        <div class="input-group" style="max-width: 250px;">
+                                        <div class="input-group">
                                             <button type="button" class="btn btn-outline-secondary" id="btnDecrementar"
                                                 onclick="cambiarNumeroCamas(-1)" disabled>
                                                 <i class="bi bi-dash-lg"></i>
@@ -613,10 +604,12 @@
                                             </button>
                                         </div>
                                         <small class="text-muted mt-2 d-block" id="infoAcompanantes">
-                                            Selecciona una habitación para elegir el número de camas
+                                            Selecciona las fechas para ver disponibilidad
                                         </small>
                                     </div>
                                 </div>
+                                <input type="hidden" name="id_habitacion" id="hiddenHabitacion" value="">
+                                <input type="hidden" name="num_camas" id="hiddenNumCamas" value="1">
                             </div>
                         </div>
 
@@ -1050,7 +1043,7 @@
         let acompanantesRequeridos = 0;
 
         function agregarAcompanante() {
-            const numeroCamas = parseInt(document.getElementById('numeroCamasInput').value) || 0;
+            const numeroCamas = parseInt(document.getElementById('hiddenNumCamas').value) || 0;
             acompanantesRequeridos = numeroCamas - 1;
 
             if (acompanantesActuales >= acompanantesRequeridos) {
@@ -1123,7 +1116,7 @@
 
             const badge = document.getElementById('acompanantesRequeridos');
             const btnAgregar = document.getElementById('btnAgregarAcompanante');
-            const numeroCamas = parseInt(document.getElementById('numeroCamasInput').value) || 0;
+            const numeroCamas = parseInt(document.getElementById('hiddenNumCamas').value) || 0;
             acompanantesRequeridos = numeroCamas - 1;
 
             // Actualizar badge
@@ -1263,9 +1256,8 @@
         function actualizarDisponibilidad() {
             const fechaInicioEl = document.getElementById('fecha_inicio');
             const fechaFinEl = document.getElementById('fecha_fin');
-            const selectHabitacion = document.getElementById('selectHabitacion');
 
-            if (!fechaInicioEl || !fechaFinEl || !selectHabitacion) return;
+            if (!fechaInicioEl || !fechaFinEl) return;
 
             const fechaInicio = fechaInicioEl.value;
             const fechaFin = fechaFinEl.value;
@@ -1277,63 +1269,42 @@
                     return;
                 }
 
-                fetch(`disponibilidad.php?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
+                // Obtener total de camas disponibles
+                fetch(`disponibilidad_total.php?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
                     .then(response => response.json())
                     .then(data => {
-                        selectHabitacion.innerHTML = '<option value="">Seleccione una habitación</option>';
-
-                        // Resetear botones de camas
-                        document.getElementById('btnDecrementar').disabled = true;
-                        document.getElementById('btnIncrementar').disabled = true;
-                        document.getElementById('displayNumeroCamas').value = '1';
-                        document.getElementById('numeroCamasInput').value = '1';
+                        camasDisponiblesMax = data.disponibles || 0;
                         numeroCamasActual = 1;
-                        camasDisponiblesMax = 0;
 
-                        if (data && data.length > 0) {
-                            data.forEach(hab => {
-                                selectHabitacion.innerHTML += `<option value="${hab.id}" data-camas="${hab.camas_disponibles}">Habitación ${hab.numero} (${hab.camas_disponibles} camas disponibles)</option>`;
-                            });
+                        // Resetear valores
+                        document.getElementById('btnDecrementar').disabled = true;
+                        document.getElementById('displayNumeroCamas').value = '1';
+                        document.getElementById('hiddenNumCamas').value = '1';
+
+                        // Habilitar/deshabilitar botón incrementar
+                        document.getElementById('btnIncrementar').disabled = camasDisponiblesMax <= 1;
+
+                        // Actualizar info
+                        const infoEl = document.getElementById('infoAcompanantes');
+                        if (camasDisponiblesMax > 0) {
+                            infoEl.innerHTML = `<i class="bi bi-check-circle-fill"></i> Hay ${camasDisponiblesMax} cama${camasDisponiblesMax !== 1 ? 's' : ''} disponible${camasDisponiblesMax !== 1 ? 's' : ''} para estas fechas`;
+                            infoEl.className = 'text-success mt-2 d-block';
                         } else {
-                            selectHabitacion.innerHTML = '<option value="">No hay habitaciones disponibles</option>';
+                            infoEl.innerHTML = '<i class="bi bi-x-circle-fill"></i> No hay camas disponibles para estas fechas';
+                            infoEl.className = 'text-danger mt-2 d-block';
+                            document.getElementById('btnIncrementar').disabled = true;
                         }
+
+                        // Resetear acompañantes
+                        document.getElementById('cardAcompanantes').style.display = 'none';
+                        document.getElementById('acompanantesContainer').innerHTML = '';
+                        acompanantesActuales = 0;
                     })
                     .catch(error => {
                         console.error('Error:', error);
-                        selectHabitacion.innerHTML = '<option value="">Error al cargar habitaciones</option>';
+                        document.getElementById('infoAcompanantes').innerHTML = 'Error al cargar disponibilidad';
+                        document.getElementById('infoAcompanantes').className = 'text-danger mt-2 d-block';
                     });
-            }
-        }
-
-        function habilitarSelectorCamas() {
-            const selectHabitacion = document.getElementById('selectHabitacion');
-            const selectedOption = selectHabitacion.options[selectHabitacion.selectedIndex];
-            const btnDecrementar = document.getElementById('btnDecrementar');
-            const btnIncrementar = document.getElementById('btnIncrementar');
-
-            if (selectHabitacion.value) {
-                camasDisponiblesMax = parseInt(selectedOption.dataset.camas) || 0;
-                numeroCamasActual = 1;
-
-                // Actualizar display
-                document.getElementById('displayNumeroCamas').value = '1';
-                document.getElementById('numeroCamasInput').value = '1';
-
-                // Habilitar botones
-                btnDecrementar.disabled = true; // Ya está en 1
-                btnIncrementar.disabled = camasDisponiblesMax <= 1;
-
-                // Actualizar info
-                actualizarInfoAcompanantes();
-
-                // Resetear acompañantes
-                document.getElementById('cardAcompanantes').style.display = 'none';
-                document.getElementById('acompanantesContainer').innerHTML = '';
-                acompanantesActuales = 0;
-            } else {
-                btnDecrementar.disabled = true;
-                btnIncrementar.disabled = true;
-                document.getElementById('infoAcompanantes').innerHTML = 'Selecciona una habitación para elegir el número de camas';
             }
         }
 
@@ -1345,7 +1316,7 @@
 
                 // Actualizar displays
                 document.getElementById('displayNumeroCamas').value = numeroCamasActual;
-                document.getElementById('numeroCamasInput').value = numeroCamasActual;
+                document.getElementById('hiddenNumCamas').value = numeroCamasActual;
 
                 // Actualizar botones
                 document.getElementById('btnDecrementar').disabled = numeroCamasActual <= 1;
