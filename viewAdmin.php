@@ -226,8 +226,8 @@
             $actividad     = sanitize_input($_POST['actividad'] ?? '');
 
             // Validar fechas
-            if ($fecha_inicio >= $fecha_fin) {
-                $_SESSION['mensaje']      = "La fecha de inicio debe ser anterior a la fecha de fin";
+            if ($fecha_inicio > $fecha_fin) {
+                $_SESSION['mensaje']      = "La fecha de fin debe ser igual o posterior a la fecha de inicio";
                 $_SESSION['tipo_mensaje'] = 'danger';
             } else {
                 try {
@@ -288,8 +288,8 @@
             ];
 
             // Validar fechas
-            if ($datos['fecha_inicio'] >= $datos['fecha_fin']) {
-                $mensaje      = "La fecha de inicio debe ser anterior a la fecha de fin";
+            if ($datos['fecha_inicio'] > $datos['fecha_fin']) {
+                $mensaje      = "La fecha de fin debe ser igual o posterior a la fecha de inicio";
                 $tipo_mensaje = 'danger';
             } elseif ($datos['numero_camas'] < 1) {
                 $mensaje      = "Debe seleccionar al menos 1 cama";
@@ -326,8 +326,8 @@
                 $fecha_fin     = sanitize_input($_POST['fecha_fin']);
 
                 // Validar fechas
-                if ($fecha_inicio >= $fecha_fin) {
-                    throw new Exception("La fecha de inicio debe ser anterior a la fecha de fin");
+                if ($fecha_inicio > $fecha_fin) {
+                    throw new Exception("La fecha de fin debe ser igual o posterior a la fecha de inicio");
                 }
 
                 // Validar número de camas
@@ -418,8 +418,8 @@
                 $actividad     = sanitize_input($_POST['actividad']);
 
                 // Validar fechas
-                if ($fecha_inicio >= $fecha_fin) {
-                    throw new Exception("La fecha de inicio debe ser anterior a la fecha de fin");
+                if ($fecha_inicio > $fecha_fin) {
+                    throw new Exception("La fecha de fin debe ser igual o posterior a la fecha de inicio");
                 }
 
                 // Validar número de camas
@@ -930,24 +930,24 @@
 
                 <?php if ($accion === 'dashboard'): ?>
                     <!-- Dashboard -->
-                    <h2 class="mb-4">Dashboard</h2>
-
-                    <!-- Primera fila de estadísticas -->
-                    <div class="row mb-4">
-                        <div class="col-md-4">
-                            <div class="card card-stat primary shadow-sm">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <h6 class="text-muted">Total Habitaciones</h6>
-                                            <h2><?php echo count($habitaciones) ?></h2>
-                                        </div>
-                                        <i class="bi bi-door-open fs-1 text-primary"></i>
-                                    </div>
-                                </div>
-                            </div>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+                        <div>
+                            <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalReservaSocio">
+                                <i class="bi bi-person-plus"></i> Nueva Reserva Socio
+                            </button>
+                            <button class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#modalReservaNoSocio">
+                                <i class="bi bi-person"></i> Nueva Reserva No Socio
+                            </button>
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservaEspecial">
+                                <i class="bi bi-calendar-event"></i> Nueva Reserva Especial
+                            </button>
                         </div>
-                        <div class="col-md-4">
+                    </div>
+
+                    <!-- Fila única de estadísticas -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
                             <a href="?accion=reservas&tab=pendientes" class="text-decoration-none">
                                 <div class="card card-stat warning shadow-sm">
                                     <div class="card-body">
@@ -962,24 +962,7 @@
                                 </div>
                             </a>
                         </div>
-                        <div class="col-md-4">
-                            <div class="card card-stat success shadow-sm">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <h6 class="text-muted">Total Camas</h6>
-                                            <h2>26</h2>
-                                        </div>
-                                        <i class="bi bi-grid-3x3-gap-fill fs-1 text-success"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Segunda fila de estadísticas - Reservas -->
-                    <div class="row mb-4">
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <a href="?accion=reservas&tab=aprobadas" class="text-decoration-none">
                                 <div class="card card-stat success shadow-sm">
                                     <div class="card-body">
@@ -997,7 +980,7 @@
                                 </div>
                             </a>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <a href="?accion=reservas&tab=canceladas" class="text-decoration-none">
                                 <div class="card card-stat danger shadow-sm">
                                     <div class="card-body">
@@ -1014,6 +997,19 @@
                                     </div>
                                 </div>
                             </a>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card card-stat primary shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="text-muted">Total Camas</h6>
+                                            <h2>26</h2>
+                                        </div>
+                                        <i class="bi bi-grid-3x3-gap-fill fs-1 text-primary"></i>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1152,7 +1148,7 @@
                         </div>
                     </div>
 
-                    <!-- Reservas pendientes de aprobación -->
+                    <!-- Reservas pendientes de aprobación - OCULTO
                     <div class="card shadow-sm">
                         <div class="card-header bg-warning text-white">
                             <h5 class="mb-0"><i class="bi bi-clock-history"></i> Reservas Pendientes de Aprobación</h5>
@@ -1210,8 +1206,9 @@
                             <?php endif; ?>
                         </div>
                     </div>
+                    -->
 
-                    <!-- Estado de habitaciones -->
+                    <!-- Estado de habitaciones - OCULTO
                     <div class="card shadow-sm mt-4">
                         <div class="card-header bg-primary text-white">
                             <h5 class="mb-0"><i class="bi bi-building"></i> Estado de Habitaciones</h5>
@@ -1238,6 +1235,7 @@
                             </div>
                         </div>
                     </div>
+                    -->
 
                 <?php elseif ($accion === 'usuarios' || $accion === 'editar_usuario'): ?>
                     <!-- Gestión de Usuarios -->
@@ -1832,7 +1830,16 @@
                         </div>
                     <?php endif; ?>
 
-                    <!-- Modal para Crear Reserva Socio -->
+                <?php endif; ?>
+                <!-- Fin de la sección de reservas -->
+
+            </div> <!-- End col-md-10 -->
+        </div> <!-- End row -->
+    </div> <!-- End container-fluid -->
+
+    <!-- Modales de Reservas (disponibles en todas las vistas) -->
+
+    <!-- Modal para Crear Reserva Socio -->
                     <div class="modal fade" id="modalReservaSocio" tabindex="-1" aria-labelledby="modalReservaSocioLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -1850,9 +1857,13 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">Seleccionar Socio *</label>
+                            <label class="form-label">Buscar Socio</label>
                             <input type="text" class="form-control mb-2" id="buscarSocio" placeholder="Buscar por nombre, apellidos o teléfono...">
-                            <select class="form-select" name="id_usuario" required id="selectSocio" size="6">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Socio *</label>
+                            <select class="form-select" name="id_usuario" required id="selectSocio">
                                 <option value="">Seleccione un socio</option>
                                 <?php
                                     $stmt = $conexionPDO->prepare("SELECT id, num_socio, nombre, apellido1, apellido2, telf FROM usuarios WHERE rol = 'user' ORDER BY num_socio");
@@ -1860,7 +1871,7 @@
                                     $socios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 foreach ($socios as $socio): ?>
                                     <option value="<?php echo $socio['id'] ?>" data-nombre="<?php echo strtolower($socio['nombre'] . ' ' . $socio['apellido1'] . ' ' . $socio['apellido2']) ?>" data-telf="<?php echo $socio['telf'] ?>">
-                                        <?php echo $socio['num_socio'] ?> - <?php echo $socio['nombre'] ?> <?php echo $socio['apellido1'] ?> <?php echo $socio['apellido2'] ?> (<?php echo $socio['telf'] ?>)
+                                        <?php echo $socio['nombre'] ?> <?php echo $socio['apellido1'] ?> <?php echo $socio['apellido2'] ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -1984,8 +1995,8 @@
                                 <input type="text" class="form-control" name="telefono" required>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Email</label>
-                                <input type="email" class="form-control" name="email">
+                                <label class="form-label">Email *</label>
+                                <input type="email" class="form-control" name="email" required>
                             </div>
                         </div>
 
@@ -2214,13 +2225,13 @@
             input.value = nuevoValor;
         }
 
-        // Validar que fecha fin sea posterior a fecha inicio
+        // Validar que fecha fin sea igual o posterior a fecha inicio
         document.getElementById('fechaFinEspecial').addEventListener('change', function() {
             const fechaInicio = document.getElementById('fechaInicioEspecial').value;
             const fechaFin = this.value;
 
-            if (fechaInicio && fechaFin && fechaFin <= fechaInicio) {
-                alert('La fecha de fin debe ser posterior a la fecha de inicio');
+            if (fechaInicio && fechaFin && fechaFin < fechaInicio) {
+                alert('La fecha de fin debe ser igual o posterior a la fecha de inicio');
                 this.value = '';
             }
         });
@@ -2380,9 +2391,11 @@
 
         // Funcionalidad de búsqueda de socios
         document.getElementById('buscarSocio').addEventListener('input', function() {
-            const searchText = this.value.toLowerCase();
+            const searchText = this.value.toLowerCase().trim();
             const select = document.getElementById('selectSocio');
             const options = select.querySelectorAll('option');
+            let visibleOptions = [];
+            let exactMatch = null;
 
             options.forEach(option => {
                 if (option.value === '') {
@@ -2395,10 +2408,25 @@
 
                 if (nombre.includes(searchText) || telf.includes(searchText)) {
                     option.style.display = 'block';
+                    visibleOptions.push(option);
+
+                    // Verificar coincidencia exacta
+                    if (nombre === searchText || telf === searchText) {
+                        exactMatch = option;
+                    }
                 } else {
                     option.style.display = 'none';
                 }
             });
+
+            // Autoseleccionar si hay coincidencia exacta o solo una opción visible
+            if (searchText && exactMatch) {
+                select.value = exactMatch.value;
+            } else if (searchText && visibleOptions.length === 1) {
+                select.value = visibleOptions[0].value;
+            } else if (!searchText) {
+                select.value = '';
+            }
         });
 
         // Validación obligatoria de acompañantes en reserva de socio
@@ -2418,8 +2446,8 @@
             const fechaInicio = document.getElementById('fechaInicioSocio').value;
             const fechaFin = this.value;
 
-            if (fechaInicio && fechaFin && fechaFin <= fechaInicio) {
-                alert('La fecha de fin debe ser posterior a la fecha de inicio');
+            if (fechaInicio && fechaFin && fechaFin < fechaInicio) {
+                alert('La fecha de fin debe ser igual o posterior a la fecha de inicio');
                 this.value = '';
             }
         });
@@ -2586,8 +2614,8 @@
             const fechaInicio = document.getElementById('fechaInicioNoSocio').value;
             const fechaFin = this.value;
 
-            if (fechaInicio && fechaFin && fechaFin <= fechaInicio) {
-                alert('La fecha de fin debe ser posterior a la fecha de inicio');
+            if (fechaInicio && fechaFin && fechaFin < fechaInicio) {
+                alert('La fecha de fin debe ser igual o posterior a la fecha de inicio');
                 this.value = '';
             }
         });
@@ -2935,16 +2963,12 @@
             const fechaInicio = document.getElementById('editFechaInicio').value;
             const fechaFin = this.value;
 
-            if (fechaInicio && fechaFin && fechaFin <= fechaInicio) {
-                alert('La fecha de fin debe ser posterior a la fecha de inicio');
+            if (fechaInicio && fechaFin && fechaFin < fechaInicio) {
+                alert('La fecha de fin debe ser igual o posterior a la fecha de inicio');
                 this.value = '';
             }
         });
     </script>
-    <?php endif; ?>
-    </div> <!-- End col-md-10 -->
-    </div> <!-- End row -->
-    </div> <!-- End container-fluid -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>

@@ -9,8 +9,8 @@
 
     // Comprobar autenticación y rol
     if (! isset($_SESSION['userId']) || ($_SESSION['rol'] ?? '') !== 'user') {
-        header('Location: login.php');
-        exit;
+    header('Location: login.php');
+    exit;
     }
     session_regenerate_id(true);
 
@@ -25,133 +25,133 @@
 
     // Procesar acciones POST
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        switch ($accion) {
-            case 'crear_reserva':
-                try {
-                    $conexionPDO->beginTransaction();
+    switch ($accion) {
+        case 'crear_reserva':
+            try {
+                $conexionPDO->beginTransaction();
 
-                    $numero_camas = isset($_POST['numero_camas']) ? (int) $_POST['numero_camas'] : 0;
-                    if ($numero_camas < 1) {
-                        throw new Exception("Debes reservar al menos 1 cama");
-                    }
-
-                    $acompanantes = $_POST['acompanantes'] ?? [];
-                    if (! is_array($acompanantes)) {
-                        $acompanantes = [];
-                    }
-
-                    $num_acompanantes        = count($acompanantes);
-                    $acompanantes_requeridos = $numero_camas - 1;
-
-                    if ($num_acompanantes != $acompanantes_requeridos) {
-                        throw new Exception("Debes agregar exactamente $acompanantes_requeridos acompañante(s) para $numero_camas cama(s)");
-                    }
-
-                    $datos_reserva = [
-                        'id_usuario'    => $_SESSION['userId'],
-                        'id_habitacion' => isset($_POST['id_habitacion']) ? (int) $_POST['id_habitacion'] : 0,
-                        'numero_camas'  => $numero_camas,
-                        'fecha_inicio'  => $_POST['fecha_inicio'] ?? '',
-                        'fecha_fin'     => $_POST['fecha_fin'] ?? '',
-                    ];
-
-                    $id_reserva = crear_reserva($conexionPDO, $datos_reserva);
-                    if (! $id_reserva) {
-                        throw new Exception("Error al crear la reserva");
-                    }
-
-                    foreach ($acompanantes as $acomp) {
-                        if (! empty($acomp['dni'])) {
-                            $datos_acomp = [
-                                'num_socio' => $acomp['num_socio'] ?? null,
-                                'es_socio'  => isset($acomp['es_socio']) && $acomp['es_socio'] === 'si',
-                                'dni'       => $acomp['dni'] ?? '',
-                                'nombre'    => $acomp['nombre'] ?? '',
-                                'apellido1' => $acomp['apellido1'] ?? '',
-                                'apellido2' => $acomp['apellido2'] ?? null,
-                                'actividad' => $_POST['actividad'] ?? null,
-                            ];
-                            agregar_acompanante($conexionPDO, $id_reserva, $datos_acomp);
-                        }
-                    }
-
-                    $conexionPDO->commit();
-                    $mensaje = "Reserva creada exitosamente. Pendiente de aprobación por el administrador.";
-                } catch (Exception $e) {
-                    if ($conexionPDO->inTransaction()) {
-                        $conexionPDO->rollBack();
-                    }
-                    $mensaje      = "Error al crear la reserva: " . $e->getMessage();
-                    $tipo_mensaje = 'danger';
+                $numero_camas = isset($_POST['numero_camas']) ? (int) $_POST['numero_camas'] : 0;
+                if ($numero_camas < 1) {
+                    throw new Exception("Debes reservar al menos 1 cama");
                 }
-                $accion = 'mis_reservas';
-                break;
 
-            case 'cancelar_reserva':
-                $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
-                if ($id && cancelar_reserva($conexionPDO, $id)) {
-                    $mensaje = "Reserva cancelada exitosamente";
-                } else {
-                    $mensaje      = "Error al cancelar la reserva";
-                    $tipo_mensaje = 'danger';
+                $acompanantes = $_POST['acompanantes'] ?? [];
+                if (! is_array($acompanantes)) {
+                    $acompanantes = [];
                 }
-                $accion = 'mis_reservas';
-                break;
 
-            case 'editar_reserva_usuario':
-                try {
-                    $conexionPDO->beginTransaction();
+                $num_acompanantes        = count($acompanantes);
+                $acompanantes_requeridos = $numero_camas - 1;
 
-                    $id_reserva    = isset($_POST['id_reserva']) ? (int) $_POST['id_reserva'] : 0;
-                    $fecha_inicio  = $_POST['fecha_inicio'] ?? '';
-                    $fecha_fin     = $_POST['fecha_fin'] ?? '';
-                    $id_habitacion = isset($_POST['id_habitacion']) ? (int) $_POST['id_habitacion'] : 0;
-                    $numero_camas  = isset($_POST['numero_camas']) ? (int) $_POST['numero_camas'] : 0;
-
-                    $reserva_actual = obtener_reserva($conexionPDO, $id_reserva);
-                    if (! $reserva_actual || $reserva_actual['id_usuario'] != $_SESSION['userId']) {
-                        throw new Exception("No tienes permiso para editar esta reserva");
-                    }
-
-                    if ($reserva_actual['estado'] !== 'pendiente') {
-                        throw new Exception("Solo puedes editar reservas pendientes");
-                    }
-
-                    if ($fecha_inicio >= $fecha_fin) {
-                        throw new Exception("La fecha de inicio debe ser anterior a la fecha de fin");
-                    }
-
-                    if (! editar_reserva_usuario($conexionPDO, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)) {
-                        throw new Exception("No hay suficientes camas disponibles");
-                    }
-
-                    $conexionPDO->commit();
-                    $mensaje = "Reserva actualizada exitosamente";
-                } catch (Exception $e) {
-                    if ($conexionPDO->inTransaction()) {
-                        $conexionPDO->rollBack();
-                    }
-                    $mensaje      = "Error al editar reserva: " . $e->getMessage();
-                    $tipo_mensaje = 'danger';
+                if ($num_acompanantes != $acompanantes_requeridos) {
+                    throw new Exception("Debes agregar exactamente $acompanantes_requeridos acompañante(s) para $numero_camas cama(s)");
                 }
-                $accion = 'mis_reservas';
-                break;
 
-            case 'actualizar_perfil':
-                $email = $_POST['email'] ?? '';
-                $telf  = $_POST['telf'] ?? '';
+                $datos_reserva = [
+                    'id_usuario'    => $_SESSION['userId'],
+                    'id_habitacion' => isset($_POST['id_habitacion']) ? (int) $_POST['id_habitacion'] : 0,
+                    'numero_camas'  => $numero_camas,
+                    'fecha_inicio'  => $_POST['fecha_inicio'] ?? '',
+                    'fecha_fin'     => $_POST['fecha_fin'] ?? '',
+                ];
 
-                $resultado = actualizar_perfil_usuario($conexionPDO, $_SESSION['userId'], $email, $telf);
-                if ($resultado['exito'] ?? false) {
-                    $mensaje           = $resultado['mensaje'] ?? 'Perfil actualizado';
-                    $_SESSION['email'] = htmlspecialchars($email);
-                } else {
-                    $mensaje      = $resultado['mensaje'] ?? 'Error al actualizar perfil';
-                    $tipo_mensaje = 'danger';
+                $id_reserva = crear_reserva($conexionPDO, $datos_reserva);
+                if (! $id_reserva) {
+                    throw new Exception("Error al crear la reserva");
                 }
-                $accion = 'perfil';
-                break;
-        }
+
+                foreach ($acompanantes as $acomp) {
+                    if (! empty($acomp['dni'])) {
+                        $datos_acomp = [
+                            'num_socio' => $acomp['num_socio'] ?? null,
+                            'es_socio'  => isset($acomp['es_socio']) && $acomp['es_socio'] === 'si',
+                            'dni'       => $acomp['dni'] ?? '',
+                            'nombre'    => $acomp['nombre'] ?? '',
+                            'apellido1' => $acomp['apellido1'] ?? '',
+                            'apellido2' => $acomp['apellido2'] ?? null,
+                            'actividad' => $_POST['actividad'] ?? null,
+                        ];
+                        agregar_acompanante($conexionPDO, $id_reserva, $datos_acomp);
+                    }
+                }
+
+                $conexionPDO->commit();
+                $mensaje = "Reserva creada exitosamente. Pendiente de aprobación por el administrador.";
+            } catch (Exception $e) {
+                if ($conexionPDO->inTransaction()) {
+                    $conexionPDO->rollBack();
+                }
+                $mensaje      = "Error al crear la reserva: " . $e->getMessage();
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'mis_reservas';
+            break;
+
+        case 'cancelar_reserva':
+            $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+            if ($id && cancelar_reserva($conexionPDO, $id)) {
+                $mensaje = "Reserva cancelada exitosamente";
+            } else {
+                $mensaje      = "Error al cancelar la reserva";
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'mis_reservas';
+            break;
+
+        case 'editar_reserva_usuario':
+            try {
+                $conexionPDO->beginTransaction();
+
+                $id_reserva    = isset($_POST['id_reserva']) ? (int) $_POST['id_reserva'] : 0;
+                $fecha_inicio  = $_POST['fecha_inicio'] ?? '';
+                $fecha_fin     = $_POST['fecha_fin'] ?? '';
+                $id_habitacion = isset($_POST['id_habitacion']) ? (int) $_POST['id_habitacion'] : 0;
+                $numero_camas  = isset($_POST['numero_camas']) ? (int) $_POST['numero_camas'] : 0;
+
+                $reserva_actual = obtener_reserva($conexionPDO, $id_reserva);
+                if (! $reserva_actual || $reserva_actual['id_usuario'] != $_SESSION['userId']) {
+                    throw new Exception("No tienes permiso para editar esta reserva");
+                }
+
+                if ($reserva_actual['estado'] !== 'pendiente') {
+                    throw new Exception("Solo puedes editar reservas pendientes");
+                }
+
+                if ($fecha_inicio > $fecha_fin) {
+                    throw new Exception("La fecha de fin debe ser igual o posterior a la fecha de inicio");
+                }
+
+                if (! editar_reserva_usuario($conexionPDO, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)) {
+                    throw new Exception("No hay suficientes camas disponibles");
+                }
+
+                $conexionPDO->commit();
+                $mensaje = "Reserva actualizada exitosamente";
+            } catch (Exception $e) {
+                if ($conexionPDO->inTransaction()) {
+                    $conexionPDO->rollBack();
+                }
+                $mensaje      = "Error al editar reserva: " . $e->getMessage();
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'mis_reservas';
+            break;
+
+        case 'actualizar_perfil':
+            $email = $_POST['email'] ?? '';
+            $telf  = $_POST['telf'] ?? '';
+
+            $resultado = actualizar_perfil_usuario($conexionPDO, $_SESSION['userId'], $email, $telf);
+            if ($resultado['exito'] ?? false) {
+                $mensaje           = $resultado['mensaje'] ?? 'Perfil actualizado';
+                $_SESSION['email'] = htmlspecialchars($email);
+            } else {
+                $mensaje      = $resultado['mensaje'] ?? 'Error al actualizar perfil';
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'perfil';
+            break;
+    }
     }
 
     // Obtener datos según acción
@@ -161,11 +161,11 @@
     // Función para mes en español
     function mes_espanol($mes)
     {
-        $meses = [
-            1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4       => 'Abril', 5    => 'Mayo', 6       => 'Junio',
-            7 => 'Julio', 8 => 'Agosto', 9  => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
-        ];
-        return $meses[(int) $mes] ?? '';
+    $meses = [
+        1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4       => 'Abril', 5    => 'Mayo', 6       => 'Junio',
+        7 => 'Julio', 8 => 'Agosto', 9  => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+    ];
+    return $meses[(int) $mes] ?? '';
     }
 
     // Mes y año actual o seleccionado
@@ -176,12 +176,12 @@
     $mes_anterior  = $mes_actual - 1;
     $anio_anterior = $anio_actual;
     if ($mes_anterior < 1) {$mes_anterior = 12;
-        $anio_anterior--;}
+    $anio_anterior--;}
 
     $mes_siguiente  = $mes_actual + 1;
     $anio_siguiente = $anio_actual;
     if ($mes_siguiente > 12) {$mes_siguiente = 1;
-        $anio_siguiente++;}
+    $anio_siguiente++;}
 
     // Días del mes
     $primer_dia        = mktime(0, 0, 0, $mes_actual, 1, $anio_actual);
@@ -482,17 +482,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																													                                            SELECT r.id, r.estado, h.numero as habitacion,
-																													                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																													                                            FROM reservas r
-																													                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																													                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																													                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																													                                            WHERE r.id_usuario = :id_usuario
-																													                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																													                                            AND r.estado IN ('pendiente', 'reservada')
-																													                                            GROUP BY r.id, r.estado, h.numero
-																													                                        ");
+																														                                            SELECT r.id, r.estado, h.numero as habitacion,
+																														                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																														                                            FROM reservas r
+																														                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																														                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																														                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																														                                            WHERE r.id_usuario = :id_usuario
+																														                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																														                                            AND r.estado IN ('pendiente', 'reservada')
+																														                                            GROUP BY r.id, r.estado, h.numero
+																														                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -500,11 +500,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																													                                            SELECT COUNT(*) as total
-																													                                            FROM reservas
-																													                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																													                                            AND estado = 'reservada'
-																													                                        ");
+																														                                            SELECT COUNT(*) as total
+																														                                            FROM reservas
+																														                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																														                                            AND estado = 'reservada'
+																														                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -522,11 +522,11 @@
                                         } elseif ($mi_reserva) {
                                         // Usuario tiene reserva en esta fecha
                                         if ($mi_reserva['estado'] === 'reservada') {
-                                            $clase .= ' mi-reserva-aprobada';
-                                            $info_extra = "Hab. {$mi_reserva['habitacion']}, Camas {$mi_reserva['camas']}";
+                                            $clase      .= ' mi-reserva-aprobada';
+                                            $info_extra  = "Hab. {$mi_reserva['habitacion']}, Camas {$mi_reserva['camas']}";
                                         } else {
-                                            $clase .= ' mi-reserva-pendiente';
-                                            $info_extra = "Pendiente - Hab. {$mi_reserva['habitacion']}, Camas {$mi_reserva['camas']}";
+                                            $clase      .= ' mi-reserva-pendiente';
+                                            $info_extra  = "Pendiente - Hab. {$mi_reserva['habitacion']}, Camas {$mi_reserva['camas']}";
                                         }
                                     } elseif ($camas_libres === 0) {
                                         $clase .= ' lleno';
@@ -748,7 +748,7 @@
                                             <?php foreach ($aprobadas as $reserva):
                                                     $dias         = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
                                                     $puede_editar = strtotime($reserva['fecha_inicio']) > strtotime(date('Y-m-d'));
-                                                ?>
+                                            ?>
 					                                                <tr>
 					                                                    <td>Hab.					                                                            				                                                            			                                                            		                                                            	                                                             <?php echo $reserva['habitacion_numero'] ?></td>
 					                                                    <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
@@ -818,7 +818,7 @@
                 <?php elseif ($accion === 'perfil'):
                         $usuario     = obtener_info_usuario($conexionPDO, $_SESSION['userId']);
                         $foto_perfil = $usuario['foto_perfil'] ?? null;
-                    ?>
+                ?>
 																					                    <h2><i class="bi bi-person-circle"></i> Mi Perfil</h2>
 																					                    <hr>
 
@@ -1271,9 +1271,9 @@
             const fechaFin = fechaFinEl.value;
 
             if (fechaInicio && fechaFin) {
-                // Validar que fecha_fin sea posterior a fecha_inicio
-                if (fechaFin <= fechaInicio) {
-                    alert('La fecha de salida debe ser posterior a la fecha de entrada');
+                // Validar que fecha_fin sea igual o posterior a fecha_inicio
+                if (fechaFin < fechaInicio) {
+                    alert('La fecha de salida debe ser igual o posterior a la fecha de entrada');
                     return;
                 }
 
