@@ -216,12 +216,14 @@
             ];
 
             if (crear_usuario($conexionPDO, $datos)) {
-                $mensaje = "Usuario creado exitosamente";
+                $_SESSION['mensaje']      = "Usuario creado exitosamente";
+                $_SESSION['tipo_mensaje'] = 'success';
             } else {
-                $mensaje      = "Error al crear el usuario";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Error al crear el usuario";
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'usuarios';
+            header('Location: viewAdmin.php?accion=usuarios');
+            exit;
             break;
 
         case 'actualizar_usuario':
@@ -230,10 +232,10 @@
             // Proteger al usuario admin principal
             $usuario_actual = obtener_usuario($conexionPDO, $id);
             if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
-                $mensaje      = "No se puede modificar el usuario administrador principal";
-                $tipo_mensaje = 'danger';
-                $accion       = 'usuarios';
-                break;
+                $_SESSION['mensaje']      = "No se puede modificar el usuario administrador principal";
+                $_SESSION['tipo_mensaje'] = 'danger';
+                header('Location: viewAdmin.php?accion=usuarios');
+                exit;
             }
 
             $datos = [
@@ -249,12 +251,14 @@
             ];
 
             if (actualizar_usuario($conexionPDO, $id, $datos)) {
-                $mensaje = "Usuario actualizado exitosamente";
+                $_SESSION['mensaje']      = "Usuario actualizado exitosamente";
+                $_SESSION['tipo_mensaje'] = 'success';
             } else {
-                $mensaje      = "Error al actualizar el usuario";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Error al actualizar el usuario";
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'usuarios';
+            header('Location: viewAdmin.php?accion=usuarios');
+            exit;
             break;
 
         case 'eliminar_usuario':
@@ -263,19 +267,21 @@
             // Proteger al usuario admin principal
             $usuario_actual = obtener_usuario($conexionPDO, $id);
             if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
-                $mensaje      = "No se puede eliminar el usuario administrador principal";
-                $tipo_mensaje = 'danger';
-                $accion       = 'usuarios';
-                break;
+                $_SESSION['mensaje']      = "No se puede eliminar el usuario administrador principal";
+                $_SESSION['tipo_mensaje'] = 'danger';
+                header('Location: viewAdmin.php?accion=usuarios');
+                exit;
             }
 
             if (eliminar_usuario($conexionPDO, $id)) {
-                $mensaje = "Usuario eliminado exitosamente";
+                $_SESSION['mensaje']      = "Usuario eliminado exitosamente";
+                $_SESSION['tipo_mensaje'] = 'success';
             } else {
-                $mensaje      = "Error al eliminar el usuario";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Error al eliminar el usuario";
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'usuarios';
+            header('Location: viewAdmin.php?accion=usuarios');
+            exit;
             break;
 
         case 'aprobar_reserva':
@@ -311,11 +317,14 @@
                 } catch (Exception $emailError) {
                     error_log("Error al enviar email de aprobación: " . $emailError->getMessage());
                 }
+                $_SESSION['mensaje']      = $mensaje;
+                $_SESSION['tipo_mensaje'] = 'success';
             } else {
-                $mensaje      = "Error al aprobar la reserva";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Error al aprobar la reserva";
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'reservas';
+            header('Location: viewAdmin.php?accion=reservas');
+            exit;
             break;
 
         case 'rechazar_reserva':
@@ -355,11 +364,14 @@
                 } catch (Exception $emailError) {
                     error_log("Error al enviar email de rechazo: " . $emailError->getMessage());
                 }
+                $_SESSION['mensaje']      = $mensaje;
+                $_SESSION['tipo_mensaje'] = 'success';
             } else {
-                $mensaje      = "Error al rechazar la reserva";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Error al rechazar la reserva";
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'reservas';
+            header('Location: viewAdmin.php?accion=reservas');
+            exit;
             break;
 
         case 'cancelar_reserva_admin':
@@ -396,11 +408,14 @@
                 } catch (Exception $emailError) {
                     error_log("Error al enviar email de cancelación: " . $emailError->getMessage());
                 }
+                $_SESSION['mensaje']      = $mensaje;
+                $_SESSION['tipo_mensaje'] = 'success';
             } else {
-                $mensaje      = "Error al cancelar la reserva";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Error al cancelar la reserva";
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'reservas';
+            header('Location: viewAdmin.php?accion=reservas');
+            exit;
             break;
 
         case 'eliminar_reservas_canceladas':

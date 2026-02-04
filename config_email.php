@@ -24,6 +24,13 @@ define('REFUGIO_NAME', 'Refugio de Montaña');
  */
 function enviar_email($to, $toName, $subject, $body)
 {
+    // Verificar si el email está configurado (modo desarrollo)
+    if (ADMIN_EMAIL === 'admin@refugio.com' || FROM_EMAIL === 'noreply@refugio.com') {
+        // Modo simulación: emails no configurados, no intentar enviar
+        error_log("Email simulado (no configurado) - Para: $to - Asunto: $subject");
+        return true; // Retornar true para no interrumpir el flujo
+    }
+
     // Cabeceras del email
     $headers  = "MIME-Version: 1.0" . "\r\n";
     $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
@@ -31,8 +38,8 @@ function enviar_email($to, $toName, $subject, $body)
     $headers .= "Reply-To: " . FROM_EMAIL . "\r\n";
     $headers .= "X-Mailer: PHP/" . phpversion();
 
-    // Enviar el email
-    $resultado = mail($to, $subject, $body, $headers);
+    // Enviar el email (suprimir warnings si el servidor SMTP no está configurado)
+    $resultado = @mail($to, $subject, $body, $headers);
 
     // Log del resultado (opcional)
     if (! $resultado) {

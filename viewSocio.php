@@ -21,7 +21,16 @@
     // Inicializar variables de mensaje
     $mensaje      = '';
     $tipo_mensaje = 'success';
-    $accion       = $_POST['accion'] ?? $_GET['accion'] ?? 'calendario';
+
+    // Recuperar mensajes de sesión (Post-Redirect-Get)
+    if (isset($_SESSION['mensaje'])) {
+    $mensaje      = $_SESSION['mensaje'];
+    $tipo_mensaje = $_SESSION['tipo_mensaje'] ?? 'success';
+    unset($_SESSION['mensaje']);
+    unset($_SESSION['tipo_mensaje']);
+    }
+
+    $accion = $_POST['accion'] ?? $_GET['accion'] ?? 'calendario';
 
     // Procesar acciones POST
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -101,22 +110,33 @@
                     error_log("Error al enviar email de notificación: " . $emailError->getMessage());
                 }
 
+                // Guardar mensaje en sesión y redirigir (Post-Redirect-Get)
+                $_SESSION['mensaje']      = $mensaje;
+                $_SESSION['tipo_mensaje'] = 'success';
+                header('Location: viewSocio.php?accion=mis_reservas');
+                exit;
+
             } catch (Exception $e) {
-                $mensaje      = "Error al crear la reserva: " . $e->getMessage();
-                $tipo_mensaje = 'danger';
+                $mensaje                  = "Error al crear la reserva: " . $e->getMessage();
+                $tipo_mensaje             = 'danger';
+                $_SESSION['mensaje']      = $mensaje;
+                $_SESSION['tipo_mensaje'] = $tipo_mensaje;
+                header('Location: viewSocio.php?accion=mis_reservas');
+                exit;
             }
-            $accion = 'mis_reservas';
             break;
 
         case 'cancelar_reserva':
             $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
             if ($id && cancelar_reserva($conexionPDO, $id)) {
-                $mensaje = "Reserva cancelada exitosamente";
+                $_SESSION['mensaje']      = "Reserva cancelada exitosamente";
+                $_SESSION['tipo_mensaje'] = 'success';
             } else {
-                $mensaje      = "Error al cancelar la reserva";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Error al cancelar la reserva";
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'mis_reservas';
+            header('Location: viewSocio.php?accion=mis_reservas');
+            exit;
             break;
 
         case 'editar_reserva_usuario':
@@ -180,15 +200,19 @@
                 }
 
                 $conexionPDO->commit();
-                $mensaje = "Reserva actualizada exitosamente";
+                $_SESSION['mensaje']      = "Reserva actualizada exitosamente";
+                $_SESSION['tipo_mensaje'] = 'success';
+                header('Location: viewSocio.php?accion=mis_reservas');
+                exit;
             } catch (Exception $e) {
                 if ($conexionPDO->inTransaction()) {
                     $conexionPDO->rollBack();
                 }
-                $mensaje      = "Error al editar reserva: " . $e->getMessage();
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Error al editar reserva: " . $e->getMessage();
+                $_SESSION['tipo_mensaje'] = 'danger';
+                header('Location: viewSocio.php?accion=mis_reservas');
+                exit;
             }
-            $accion = 'mis_reservas';
             break;
 
         case 'actualizar_perfil':
@@ -197,13 +221,15 @@
 
             $resultado = actualizar_perfil_usuario($conexionPDO, $_SESSION['userId'], $email, $telf);
             if ($resultado['exito'] ?? false) {
-                $mensaje           = $resultado['mensaje'] ?? 'Perfil actualizado';
-                $_SESSION['email'] = htmlspecialchars($email);
+                $_SESSION['mensaje']      = $resultado['mensaje'] ?? 'Perfil actualizado';
+                $_SESSION['tipo_mensaje'] = 'success';
+                $_SESSION['email']        = htmlspecialchars($email);
             } else {
-                $mensaje      = $resultado['mensaje'] ?? 'Error al actualizar perfil';
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = $resultado['mensaje'] ?? 'Error al actualizar perfil';
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'perfil';
+            header('Location: viewSocio.php?accion=perfil');
+            exit;
             break;
 
         case 'cambiar_password':
@@ -238,15 +264,17 @@
                 $stmt          = $conexionPDO->prepare("UPDATE usuarios SET password = ? WHERE id = ?");
 
                 if ($stmt->execute([$password_hash, $_SESSION['userId']])) {
-                    $mensaje = "Contraseña actualizada exitosamente";
+                    $_SESSION['mensaje']      = "Contraseña actualizada exitosamente";
+                    $_SESSION['tipo_mensaje'] = 'success';
                 } else {
                     throw new Exception("Error al actualizar la contraseña");
                 }
             } catch (Exception $e) {
-                $mensaje      = $e->getMessage();
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = $e->getMessage();
+                $_SESSION['tipo_mensaje'] = 'danger';
             }
-            $accion = 'perfil';
+            header('Location: viewSocio.php?accion=perfil');
+            exit;
             break;
     }
     }
@@ -579,17 +607,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																																								                                            SELECT r.id, r.estado, h.numero as habitacion,
-																																								                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																																								                                            FROM reservas r
-																																								                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																																								                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																																								                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																																								                                            WHERE r.id_usuario = :id_usuario
-																																								                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																																								                                            AND r.estado IN ('pendiente', 'reservada')
-																																								                                            GROUP BY r.id, r.estado, h.numero
-																																								                                        ");
+																																										                                            SELECT r.id, r.estado, h.numero as habitacion,
+																																										                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																																										                                            FROM reservas r
+																																										                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																																										                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																																										                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																																										                                            WHERE r.id_usuario = :id_usuario
+																																										                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																																										                                            AND r.estado IN ('pendiente', 'reservada')
+																																										                                            GROUP BY r.id, r.estado, h.numero
+																																										                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -597,11 +625,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																																								                                            SELECT COUNT(*) as total
-																																								                                            FROM reservas
-																																								                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																																								                                            AND estado = 'reservada'
-																																								                                        ");
+																																										                                            SELECT COUNT(*) as total
+																																										                                            FROM reservas
+																																										                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																																										                                            AND estado = 'reservada'
+																																										                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
