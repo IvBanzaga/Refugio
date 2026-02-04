@@ -607,17 +607,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																																										                                            SELECT r.id, r.estado, h.numero as habitacion,
-																																										                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																																										                                            FROM reservas r
-																																										                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																																										                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																																										                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																																										                                            WHERE r.id_usuario = :id_usuario
-																																										                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																																										                                            AND r.estado IN ('pendiente', 'reservada')
-																																										                                            GROUP BY r.id, r.estado, h.numero
-																																										                                        ");
+																																												                                            SELECT r.id, r.estado, h.numero as habitacion,
+																																												                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																																												                                            FROM reservas r
+																																												                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																																												                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																																												                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																																												                                            WHERE r.id_usuario = :id_usuario
+																																												                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																																												                                            AND r.estado IN ('pendiente', 'reservada')
+																																												                                            GROUP BY r.id, r.estado, h.numero
+																																												                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -625,11 +625,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																																										                                            SELECT COUNT(*) as total
-																																										                                            FROM reservas
-																																										                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																																										                                            AND estado = 'reservada'
-																																										                                        ");
+																																												                                            SELECT COUNT(*) as total
+																																												                                            FROM reservas
+																																												                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																																												                                            AND estado = 'reservada'
+																																												                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -1395,6 +1395,13 @@
                                 // Actualizar fecha mínima de salida (puede ser el mismo día)
                                 if (selectedDates.length > 0) {
                                     window.fpEditFin.set('minDate', selectedDates[0]);
+
+                                    // Verificar disponibilidad si ambas fechas están seleccionadas
+                                    const fechaFin = document.getElementById('editFechaFinUsuario').value;
+                                    const idReserva = document.getElementById('editIdReservaUsuario').value;
+                                    if (fechaFin && idReserva) {
+                                        verificarDisponibilidadEdicion(dateStr, fechaFin, idReserva);
+                                    }
                                 }
                             }
                         });
@@ -1408,6 +1415,14 @@
                                 if (fechasCompletasGlobal.includes(fecha)) {
                                     dayElem.classList.add('dia-completo');
                                     dayElem.setAttribute('title', '⚠️ Día completo - Sin camas disponibles');
+                                }
+                            },
+                            onChange: function(selectedDates, dateStr, instance) {
+                                // Verificar disponibilidad cuando cambia la fecha fin
+                                const fechaInicio = document.getElementById('editFechaInicioUsuario').value;
+                                const idReserva = document.getElementById('editIdReservaUsuario').value;
+                                if (fechaInicio && idReserva) {
+                                    verificarDisponibilidadEdicion(fechaInicio, dateStr, idReserva);
                                 }
                             }
                         });
@@ -1453,7 +1468,8 @@
                         // Actualizar info
                         const infoEl = document.getElementById('infoAcompanantes');
                         if (camasDisponiblesMax > 0) {
-                            infoEl.innerHTML = `<i class="bi bi-check-circle-fill"></i> Hay ${camasDisponiblesMax} cama${camasDisponiblesMax !== 1 ? 's' : ''} disponible${camasDisponiblesMax !== 1 ? 's' : ''} para estas fechas`;
+                            const camasRestantes = camasDisponiblesMax - 1; // Restamos 1 porque ya está usando 1 cama por defecto
+                            infoEl.innerHTML = `<i class="bi bi-check-circle-fill"></i> Disponibles: ${camasRestantes} cama${camasRestantes !== 1 ? 's' : ''} (estás usando 1)<br><i class="bi bi-info-circle"></i> Solo para ti (sin acompañantes)`;
                             infoEl.className = 'text-success mt-2 d-block';
                         } else {
                             infoEl.innerHTML = '<i class="bi bi-x-circle-fill"></i> No hay camas disponibles para estas fechas';
@@ -1497,9 +1513,10 @@
         function actualizarInfoAcompanantes() {
             const infoElement = document.getElementById('infoAcompanantes');
             const acompanantesRequeridos = numeroCamasActual - 1;
+            const camasRestantes = camasDisponiblesMax - numeroCamasActual;
 
-            // Mensaje de disponibilidad (siempre visible)
-            let mensajeDisponibilidad = `<i class="bi bi-check-circle-fill"></i> Hay ${camasDisponiblesMax} cama${camasDisponiblesMax !== 1 ? 's' : ''} disponible${camasDisponiblesMax !== 1 ? 's' : ''} para estas fechas`;
+            // Mensaje de disponibilidad mostrando camas restantes
+            let mensajeDisponibilidad = `<i class="bi bi-check-circle-fill"></i> Disponibles: ${camasRestantes} cama${camasRestantes !== 1 ? 's' : ''} (estás usando ${numeroCamasActual})`;
 
             if (numeroCamasActual === 1) {
                 infoElement.innerHTML = mensajeDisponibilidad + '<br><i class="bi bi-info-circle"></i> Solo para ti (sin acompañantes)';
@@ -1691,19 +1708,50 @@
             document.getElementById('editHabitacionUsuario').value = 1; // Habitación default
             document.getElementById('editNumeroCamasUsuario').value = reserva.numero_camas;
 
-            // Actualizar info - capacidad fija de 26 camas para habitación 1
-            maxCamasEditUsuario = 26;
-            document.getElementById('editInfoCamasUsuario').textContent = `Máximo ${maxCamasEditUsuario} camas disponibles`;
-
             // Limpiar acompañantes anteriores
             document.getElementById('acompanantesContainerEditar').innerHTML = '';
             acompanantesActualesEditar = 0;
             contadorAcompanantesEditar = 0;
 
+            // Consultar disponibilidad real para las fechas de la reserva
+            verificarDisponibilidadEdicion(reserva.fecha_inicio, reserva.fecha_fin, reserva.id);
+
             // Actualizar info de acompañantes
             actualizarInfoAcompanantesEditar();
 
             modal.show();
+        }
+
+        // Función para verificar disponibilidad en el modal de edición
+        function verificarDisponibilidadEdicion(fechaInicio, fechaFin, idReserva) {
+            if (fechaInicio && fechaFin) {
+                // Consultar disponibilidad excluyendo la reserva actual
+                fetch(`disponibilidad_total.php?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}&excluir_reserva=${idReserva}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        maxCamasEditUsuario = data.disponibles || 0;
+
+                        // Actualizar el texto de información
+                        const camasActuales = parseInt(document.getElementById('editNumeroCamasUsuario').value) || 1;
+                        const camasRestantes = maxCamasEditUsuario - camasActuales + 1;
+
+                        if (maxCamasEditUsuario > 0) {
+                            document.getElementById('editInfoCamasUsuario').textContent =
+                                `Disponibles: ${camasRestantes} camas (estás usando ${camasActuales})`;
+                            document.getElementById('editInfoCamasUsuario').className = 'text-success';
+                        } else {
+                            document.getElementById('editInfoCamasUsuario').textContent =
+                                'No hay camas disponibles para estas fechas';
+                            document.getElementById('editInfoCamasUsuario').className = 'text-danger';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error al verificar disponibilidad:', error);
+                        document.getElementById('editInfoCamasUsuario').textContent =
+                            'Error al cargar disponibilidad';
+                        document.getElementById('editInfoCamasUsuario').className = 'text-danger';
+                    });
+            }
         }
 
         // Variables para edición de usuario
@@ -1722,6 +1770,19 @@
             }
 
             input.value = nuevoValor;
+
+            // Actualizar disponibilidad mostrada
+            const camasRestantes = maxCamasEditUsuario - nuevoValor + 1;
+            const infoElement = document.getElementById('editInfoCamasUsuario');
+
+            if (camasRestantes >= 0) {
+                infoElement.textContent = `Disponibles: ${camasRestantes} camas (estás usando ${nuevoValor})`;
+                infoElement.className = 'text-success';
+            } else {
+                infoElement.textContent = `No hay suficientes camas disponibles`;
+                infoElement.className = 'text-danger';
+            }
+
             actualizarInfoAcompanantesEditar();
         }
 
