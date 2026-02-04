@@ -147,6 +147,20 @@
     /* TODO: Procesar acciones del panel admin. Todas las acciones usan POST para mayor seguridad.
        Depuración: breakpoint útil para ver los datos recibidos por POST. */
 
+    // Procesar exportación de usuarios (GET)
+    if ($accion === 'export_usuarios_csv' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $search = $_GET['search'] ?? '';
+    $sort   = $_GET['sort'] ?? 'num_socio';
+    $dir    = $_GET['dir'] ?? 'ASC';
+
+    export_usuarios_csv($conexionPDO, [
+        'search'    => $search,
+        'order_by'  => $sort,
+        'order_dir' => $dir,
+    ]);
+    // La función export_usuarios_csv hace exit, nunca llegará aquí
+    }
+
     // Procesar acciones de usuarios
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($accion) {
@@ -657,13 +671,17 @@
             $tipo_reserva = $_POST['tipo_reserva'] ?? 'pendiente';
             $filename     = "reservas_{$tipo_reserva}_" . date('Y-m-d') . ".csv";
 
-            header('Content-Type: text/csv');
+            // Configurar headers para CSV con UTF-8 BOM para Excel
+            header('Content-Type: text/csv; charset=utf-8');
             header('Content-Disposition: attachment; filename="' . $filename . '"');
 
             $output = fopen('php://output', 'w');
 
+            // Añadir BOM UTF-8 para que Excel reconozca correctamente los caracteres especiales
+            fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
             // Encabezados CSV
-            fputcsv($output, ['ID', 'Usuario', 'Email', 'Habitacion', 'Camas', 'Entrada', 'Salida', 'Estado', 'Fecha Creacion']);
+            fputcsv($output, ['ID', 'Usuario', 'Email', 'Telefono', 'Habitacion', 'Camas', 'Actividad', 'Montanero', 'Entrada', 'Salida', 'Estado', 'Fecha Creacion'], ',', '"', '\\');
 
             // Obtener datos (sin paginación para exportar todo)
             $filtros = ['estado' => $tipo_reserva];
@@ -682,33 +700,48 @@
             $reservas = listar_reservas($conexionPDO, $filtros);
 
             foreach ($reservas as $row) {
+                $usuario_info = mostrar_usuario_reserva($row);
+
+                // Extraer teléfono
+                $telefono = '-';
+                if (! empty($row['telf'])) {
+                    $telefono = $row['telf'];
+                } elseif (! empty($row['observaciones']) && strpos($row['observaciones'], 'Tel:') !== false) {
+                    preg_match('/Tel:([^|]+)/', $row['observaciones'], $matches);
+                    if (isset($matches[1])) {
+                        $telefono = trim($matches[1]);
+                    }
+                }
+
+                // Extraer email
+                $email = '-';
+                if (! empty($row['email'])) {
+                    $email = $row['email'];
+                } elseif (! empty($row['observaciones']) && strpos($row['observaciones'], 'Email:') !== false) {
+                    preg_match('/Email:([^|]+)/', $row['observaciones'], $matches);
+                    if (isset($matches[1])) {
+                        $email = trim($matches[1]);
+                    }
+                }
+
                 fputcsv($output, [
                     $row['id'],
-                    $row['nombre'] . ' ' . $row['apellido1'],
-                    $row['email'],
+                    $usuario_info['display'],
+                    $email,
+                    $telefono,
                     $row['habitacion_numero'] ?? 'Todo el Refugio',
                     $row['numero_camas'],
+                    $usuario_info['actividad'],
+                    $usuario_info['montanero'],
                     $row['fecha_inicio'],
                     $row['fecha_fin'],
                     $row['estado'],
                     $row['fecha_creacion'],
-                ]);
+                ], ',', '"', '\\');
             }
 
             fclose($output);
             exit;
-            break;
-
-        case 'export_usuarios_csv':
-            $search  = $_GET['search'] ?? '';
-            $sort    = $_GET['sort'] ?? 'num_socio';
-            $dir     = $_GET['dir'] ?? 'ASC';
-
-            export_usuarios_csv($conexionPDO, [
-                'search'    => $search,
-                'order_by'  => $sort,
-                'order_dir' => $dir,
-            ]);
             break;
     }
     }
@@ -1793,10 +1826,7 @@
                                                     <tr>
                                                         <td><?php echo $reserva['id'] ?></td>
                                                         <td>
-                                                            <strong><?php echo $usuario_info['display'] ?></strong><br>
-                                                            <?php if (! empty($usuario_info['email'])): ?>
-                                                                <small class="text-muted"><?php echo $usuario_info['email'] ?></small>
-                                                            <?php endif; ?>
+                                                            <strong><?php echo $usuario_info['display'] ?></strong>
                                                         </td>
                                                         <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
                                                         <td><?php echo $reserva['numero_camas'] ?></td>

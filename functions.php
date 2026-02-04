@@ -333,7 +333,7 @@ function export_usuarios_csv($conexion, $filtros = [])
         fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
         // Escribir encabezados
-        fputcsv($output, ['Nº Socio', 'Nombre', 'Apellido 1', 'Apellido 2', 'DNI', 'Email', 'Teléfono', 'Rol'], ';');
+        fputcsv($output, ['Nº Socio', 'Nombre', 'Apellido 1', 'Apellido 2', 'DNI', 'Email', 'Teléfono', 'Rol'], ',', '"', '\\');
 
         // Escribir datos
         foreach ($usuarios as $usuario) {
@@ -346,7 +346,7 @@ function export_usuarios_csv($conexion, $filtros = [])
                 $usuario['email'],
                 $usuario['telf'],
                 strtoupper($usuario['rol']),
-            ], ';');
+            ], ',', '"', '\\');
         }
 
         fclose($output);
