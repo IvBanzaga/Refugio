@@ -217,6 +217,53 @@
             $accion = 'reservas';
             break;
 
+        case 'eliminar_reservas_canceladas':
+            $ids = $_POST['ids_reservas'] ?? [];
+            if (! empty($ids) && is_array($ids)) {
+                $eliminadas = 0;
+                try {
+                    $conexionPDO->beginTransaction();
+
+                    foreach ($ids as $id) {
+                        $id = (int) $id;
+                        // Verificar que la reserva esté cancelada
+                        $stmt = $conexionPDO->prepare("SELECT estado FROM reservas WHERE id = :id");
+                        $stmt->execute([':id' => $id]);
+                        $reserva = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                        if ($reserva && $reserva['estado'] === 'cancelada') {
+                            // Eliminar acompañantes
+                            $stmt = $conexionPDO->prepare("DELETE FROM acompanantes WHERE id_reserva = :id");
+                            $stmt->execute([':id' => $id]);
+
+                            // Eliminar camas asignadas
+                            $stmt = $conexionPDO->prepare("DELETE FROM reservas_camas WHERE id_reserva = :id");
+                            $stmt->execute([':id' => $id]);
+
+                            // Eliminar reserva
+                            $stmt = $conexionPDO->prepare("DELETE FROM reservas WHERE id = :id");
+                            $stmt->execute([':id' => $id]);
+
+                            $eliminadas++;
+                        }
+                    }
+
+                    $conexionPDO->commit();
+                    $_SESSION['mensaje']      = "$eliminadas reserva(s) eliminada(s) exitosamente";
+                    $_SESSION['tipo_mensaje'] = 'success';
+                } catch (Exception $e) {
+                    $conexionPDO->rollBack();
+                    $_SESSION['mensaje']      = "Error al eliminar reservas: " . $e->getMessage();
+                    $_SESSION['tipo_mensaje'] = 'danger';
+                }
+            } else {
+                $_SESSION['mensaje']      = "No se seleccionaron reservas para eliminar";
+                $_SESSION['tipo_mensaje'] = 'warning';
+            }
+            header('Location: viewAdmin.php?accion=reservas&tab=canceladas');
+            exit;
+            break;
+
         case 'editar_reserva_admin':
             $id_reserva    = (int) $_POST['id_reserva'];
             $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
@@ -1754,63 +1801,81 @@
                             </div>
                             <div class="card-body">
                                 <?php if (count($reservas_canceladas) > 0): ?>
-                                    <div class="table-responsive">
-                                        <table class="table table-hover">
-                                            <thead>
-                                                <tr>
-                                                    <th>
-                                                        <a href="?accion=reservas&tab=canceladas&sort=id&dir=<?php echo($sort === 'id' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
-                                                            ID <?php if ($sort === 'id') {
-                                                                       echo($order_dir === 'ASC' ? '▲' : '▼');
-                                                                   }
-                                                               ?>
-                                                        </a>
-                                                    </th>
-                                                    <th>
-                                                        <a href="?accion=reservas&tab=canceladas&sort=nombre&dir=<?php echo($sort === 'nombre' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
-                                                            Usuario <?php if ($sort === 'nombre') {
-                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
-                                                                        }
-                                                                    ?>
-                                                        </a>
-                                                    </th>
-                                                    <th>Habitación</th>
-                                                    <th>Camas</th>
-                                                    <th>
-                                                        <a href="?accion=reservas&tab=canceladas&sort=fecha_inicio&dir=<?php echo($sort === 'fecha_inicio' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
-                                                            Entrada <?php if ($sort === 'fecha_inicio') {
-                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
-                                                                        }
-                                                                    ?>
-                                                        </a>
-                                                    </th>
-                                                    <th>
-                                                        <a href="?accion=reservas&tab=canceladas&sort=fecha_fin&dir=<?php echo($sort === 'fecha_fin' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
-                                                            Salida <?php if ($sort === 'fecha_fin') {
+                                    <div class="mb-3 d-flex gap-2 align-items-center">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSelectAll()">
+                                            <i class="bi bi-check-square"></i> Seleccionar Todas
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarSeleccionadas()" id="btnEliminarSeleccionadas" disabled>
+                                            <i class="bi bi-trash"></i> Eliminar Seleccionadas
+                                        </button>
+                                        <span class="text-muted small" id="contadorSeleccionadas">0 seleccionadas</span>
+                                    </div>
+                                    <form method="post" id="formEliminarCanceladas">
+                                        <input type="hidden" name="accion" value="eliminar_reservas_canceladas">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th style="width: 40px;">
+                                                            <input type="checkbox" class="form-check-input" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                                                        </th>
+                                                        <th>
+                                                            <a href="?accion=reservas&tab=canceladas&sort=id&dir=<?php echo($sort === 'id' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                                ID <?php if ($sort === 'id') {
                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
                                                                        }
                                                                    ?>
-                                                        </a>
-                                                    </th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($reservas_canceladas as $reserva): ?>
-                                                    <tr>
-                                                        <td><?php echo $reserva['id'] ?></td>
-                                                        <td>
-                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] ? ($reserva['nombre'] . ' ' . $reserva['apellido1']) : $reserva['observaciones']) ?></strong><br>
-                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?></small>
-                                                        </td>
-                                                        <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
-                                                        <td><?php echo $reserva['numero_camas'] ?></td>
-                                                        <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-                                                        <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+                                                            </a>
+                                                        </th>
+                                                        <th>
+                                                            <a href="?accion=reservas&tab=canceladas&sort=nombre&dir=<?php echo($sort === 'nombre' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                                Usuario <?php if ($sort === 'nombre') {
+                                                                                echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                            }
+                                                                        ?>
+                                                            </a>
+                                                        </th>
+                                                        <th>Habitación</th>
+                                                        <th>Camas</th>
+                                                        <th>
+                                                            <a href="?accion=reservas&tab=canceladas&sort=fecha_inicio&dir=<?php echo($sort === 'fecha_inicio' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                                Entrada <?php if ($sort === 'fecha_inicio') {
+                                                                                echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                            }
+                                                                        ?>
+                                                            </a>
+                                                        </th>
+                                                        <th>
+                                                            <a href="?accion=reservas&tab=canceladas&sort=fecha_fin&dir=<?php echo($sort === 'fecha_fin' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                                Salida <?php if ($sort === 'fecha_fin') {
+                                                                               echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                           }
+                                                                       ?>
+                                                            </a>
+                                                        </th>
                                                     </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($reservas_canceladas as $reserva): ?>
+                                                        <tr>
+                                                            <td>
+                                                                <input type="checkbox" class="form-check-input reserva-checkbox" name="ids_reservas[]" value="<?php echo $reserva['id'] ?>" onchange="actualizarContador()">
+                                                            </td>
+                                                            <td><?php echo $reserva['id'] ?></td>
+                                                            <td>
+                                                                <strong><?php echo htmlspecialchars($reserva['nombre'] ? ($reserva['nombre'] . ' ' . $reserva['apellido1']) : $reserva['observaciones']) ?></strong><br>
+                                                                <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?></small>
+                                                            </td>
+                                                            <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
+                                                            <td><?php echo $reserva['numero_camas'] ?></td>
+                                                            <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+                                                            <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </form>
                                     <!-- Paginación -->
                                     <?php if ($paginas_canceladas > 1): ?>
                                         <nav>
@@ -2968,6 +3033,48 @@
                 this.value = '';
             }
         });
+
+        // Funciones para manejar selección de reservas canceladas
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const checkboxes = document.querySelectorAll('.reserva-checkbox');
+            const isChecked = selectAllCheckbox ? selectAllCheckbox.checked : false;
+
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = !checkbox.checked;
+            });
+
+            actualizarContador();
+        }
+
+        function actualizarContador() {
+            const checkboxes = document.querySelectorAll('.reserva-checkbox:checked');
+            const contador = checkboxes.length;
+            const contadorElement = document.getElementById('contadorSeleccionadas');
+            const btnEliminar = document.getElementById('btnEliminarSeleccionadas');
+
+            if (contadorElement) {
+                contadorElement.textContent = `${contador} seleccionada${contador !== 1 ? 's' : ''}`;
+            }
+
+            if (btnEliminar) {
+                btnEliminar.disabled = contador === 0;
+            }
+        }
+
+        function eliminarSeleccionadas() {
+            const checkboxes = document.querySelectorAll('.reserva-checkbox:checked');
+            const contador = checkboxes.length;
+
+            if (contador === 0) {
+                alert('Por favor, selecciona al menos una reserva para eliminar');
+                return;
+            }
+
+            if (confirm(`¿Estás seguro de que deseas eliminar ${contador} reserva${contador !== 1 ? 's' : ''} cancelada${contador !== 1 ? 's' : ''}?\n\nEsta acción no se puede deshacer.`)) {
+                document.getElementById('formEliminarCanceladas').submit();
+            }
+        }
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

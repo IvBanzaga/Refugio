@@ -4,7 +4,7 @@
 
 1. Añadi para que pueda buscar al socio por telefono o nombre .
 
-1. Añadi tambien el campo de Activida a Realizar para rellenarloañade tambie el campo de Activida a Realizar para rellenarlo
+1. Añadi tambien el campo de Activida a Realizar para rellenarlo
 
 1 .Agregue un boton para Reservas No Socios:
 
