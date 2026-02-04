@@ -6,6 +6,88 @@
     require 'conexion.php';
     require 'functions.php';
 
+    // Funciones helper para parsear datos de No Socios
+    function parsear_datos_no_socio($observaciones)
+    {
+    if (empty($observaciones)) {
+        return null;
+    }
+
+    // Formato NUEVO: NO_SOCIO|nombre|DNI:xxx|Tel:xxx|Email:xxx|Grupo:xxx|||ACTIVIDAD:xxx
+    if (strpos($observaciones, 'NO_SOCIO|') === 0) {
+        $partes           = explode('|||ACTIVIDAD:', $observaciones);
+        $datos_personales = $partes[0];
+        $actividad        = isset($partes[1]) ? $partes[1] : '';
+
+        // Extraer solo el nombre (segunda parte antes del primer |)
+        $campos = explode('|', $datos_personales);
+        $nombre = isset($campos[1]) ? $campos[1] : 'No Socio';
+
+        return [
+            'es_no_socio'     => true,
+            'nombre'          => $nombre,
+            'actividad'       => $actividad,
+            'datos_completos' => $observaciones,
+        ];
+    }
+
+    // Formato ANTIGUO: NO SOCIO: nombre | DNI: xxx | Tel: xxx | Email: xxx | Grupo: xxx | Actividad: xxx
+    if (strpos($observaciones, 'NO SOCIO:') === 0) {
+        $partes = explode(' | ', $observaciones);
+
+        // Primera parte es "NO SOCIO: nombre"
+        $nombre_completo = str_replace('NO SOCIO: ', '', $partes[0]);
+
+        // Buscar la actividad (última parte que empieza con "Actividad:")
+        $actividad = '';
+        foreach ($partes as $parte) {
+            if (strpos($parte, 'Actividad:') === 0) {
+                $actividad = trim(str_replace('Actividad:', '', $parte));
+                break;
+            }
+        }
+
+        return [
+            'es_no_socio'     => true,
+            'nombre'          => $nombre_completo,
+            'actividad'       => $actividad,
+            'datos_completos' => $observaciones,
+        ];
+    }
+
+    return null;
+    }
+
+    function mostrar_usuario_reserva($reserva)
+    {
+    // Si tiene nombre de usuario, es un socio
+    if (! empty($reserva['nombre'])) {
+        return [
+            'display'   => htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']),
+            'email'     => htmlspecialchars($reserva['email'] ?? ''),
+            'actividad' => htmlspecialchars($reserva['observaciones'] ?? '-'),
+        ];
+    }
+
+    // Si no tiene nombre, puede ser no socio o reserva especial
+    $datos_no_socio = parsear_datos_no_socio($reserva['observaciones']);
+
+    if ($datos_no_socio) {
+        return [
+            'display'   => '🎫 NO SOCIO: ' . htmlspecialchars($datos_no_socio['nombre']),
+            'email'     => '',
+            'actividad' => htmlspecialchars($datos_no_socio['actividad']),
+        ];
+    }
+
+    // Es una reserva especial (TODO EL REFUGIO, etc)
+    return [
+        'display'   => '🎫 ESPECIAL: ' . htmlspecialchars($reserva['observaciones']),
+        'email'     => '',
+        'actividad' => htmlspecialchars($reserva['observaciones'] ?? '-'),
+    ];
+    }
+
     /* TODO: Comprobación de autenticación y rol. Se usa session_regenerate_id(true) para evitar robo de sesión (fijación de sesión). Depuración: puedes poner breakpoint aquí para comprobar el estado de $_SESSION. */
     if (! isset($_SESSION['userId']) || $_SESSION['rol'] !== 'admin') {
     header('Location: login.php');
@@ -303,6 +385,157 @@
                     throw new Exception("No hay suficientes camas disponibles");
                 }
             } catch (Exception $e) {
+                $_SESSION['mensaje']      = "Error al crear reserva: " . $e->getMessage();
+                $_SESSION['tipo_mensaje'] = 'danger';
+                header("Location: viewAdmin.php?accion=reservas");
+                exit;
+            }
+            break;
+
+        case 'crear_reserva_no_socio':
+            try {
+                // Recoger datos personales
+                $dni       = sanitize_input($_POST['dni']);
+                $nombre    = sanitize_input($_POST['nombre']);
+                $apellido1 = sanitize_input($_POST['apellido1']);
+                $apellido2 = sanitize_input($_POST['apellido2'] ?? '');
+                $telefono  = sanitize_input($_POST['telefono']);
+                $email     = sanitize_input($_POST['email'] ?? '');
+
+                // Determinar grupo de montañeros
+                $grupo = '';
+                if (isset($_POST['pertenece_grupo_tenerife']) && $_POST['pertenece_grupo_tenerife'] === 'on') {
+                    $grupo = 'Grupo de Montañeros de Tenerife';
+                } elseif (! empty($_POST['grupo_personalizado'])) {
+                    $grupo = sanitize_input($_POST['grupo_personalizado']);
+                }
+
+                // Datos de reserva
+                $id_habitacion = (int) $_POST['id_habitacion'];
+                $numero_camas  = (int) $_POST['numero_camas'];
+                $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
+                $fecha_fin     = sanitize_input($_POST['fecha_fin']);
+                $actividad     = sanitize_input($_POST['actividad']);
+
+                // Validar fechas
+                if ($fecha_inicio >= $fecha_fin) {
+                    throw new Exception("La fecha de inicio debe ser anterior a la fecha de fin");
+                }
+
+                // Validar número de camas
+                if ($numero_camas < 1) {
+                    throw new Exception("Debe seleccionar al menos 1 cama");
+                }
+
+                // Crear datos estructurados para NO SOCIO
+                // Formato: NO_SOCIO|nombre|dni|telefono|email|grupo|||ACTIVIDAD:actividad
+                $datos_no_socio = "NO_SOCIO|$nombre $apellido1";
+                if (! empty($apellido2)) {
+                    $datos_no_socio .= " $apellido2";
+                }
+
+                $datos_no_socio .= "|DNI:$dni|Tel:$telefono";
+                if (! empty($email)) {
+                    $datos_no_socio .= "|Email:$email";
+                }
+
+                if (! empty($grupo)) {
+                    $datos_no_socio .= "|Grupo:$grupo";
+                }
+
+                $datos_no_socio .= "|||ACTIVIDAD:$actividad";
+
+                // Crear reserva usando la función de socio pero con id_usuario NULL
+                $conexionPDO->beginTransaction();
+
+                // Buscar camas disponibles
+                $stmt = $conexionPDO->prepare("
+                    SELECT id FROM camas
+                    WHERE id_habitacion = :id_habitacion
+                    AND id NOT IN (
+                        SELECT DISTINCT c.id
+                        FROM camas c
+                        INNER JOIN reservas_camas rc ON c.id = rc.id_cama
+                        INNER JOIN reservas r ON rc.id_reserva = r.id
+                        WHERE c.id_habitacion = :id_habitacion
+                        AND r.estado IN ('pendiente', 'reservada')
+                        AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+                    )
+                    ORDER BY numero
+                    LIMIT :numero_camas
+                ");
+
+                $stmt->bindParam(':id_habitacion', $id_habitacion, PDO::PARAM_INT);
+                $stmt->bindParam(':fecha_inicio', $fecha_inicio);
+                $stmt->bindParam(':fecha_fin', $fecha_fin);
+                $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+                $stmt->execute();
+
+                $camas_disponibles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+                if (count($camas_disponibles) < $numero_camas) {
+                    throw new Exception("No hay suficientes camas disponibles en esta habitación");
+                }
+
+                // Crear reserva (id_usuario NULL para no socios)
+                $stmt = $conexionPDO->prepare("
+                    INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado, observaciones)
+                    VALUES (NULL, :id_habitacion, :numero_camas, :fecha_inicio, :fecha_fin, 'reservada', :observaciones)
+                ");
+
+                $stmt->bindParam(':id_habitacion', $id_habitacion, PDO::PARAM_INT);
+                $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+                $stmt->bindParam(':fecha_inicio', $fecha_inicio);
+                $stmt->bindParam(':fecha_fin', $fecha_fin);
+                $stmt->bindParam(':observaciones', $datos_no_socio);
+                $stmt->execute();
+
+                $id_reserva = $conexionPDO->lastInsertId();
+
+                // Asignar camas
+                $stmt_cama   = $conexionPDO->prepare("INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)");
+                $stmt_update = $conexionPDO->prepare("UPDATE camas SET estado = 'reservada' WHERE id = :id_cama");
+
+                foreach ($camas_disponibles as $id_cama) {
+                    $stmt_cama->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+                    $stmt_cama->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+                    $stmt_cama->execute();
+
+                    $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+                    $stmt_update->execute();
+                }
+
+                // Procesar acompañantes si existen
+                if (isset($_POST['acompanantes']) && is_array($_POST['acompanantes'])) {
+                    foreach ($_POST['acompanantes'] as $acomp) {
+                        if (! empty($acomp['dni']) && ! empty($acomp['nombre']) && ! empty($acomp['apellido1'])) {
+                            $stmt_acomp = $conexionPDO->prepare("
+                                INSERT INTO acompanantes (id_reserva, dni, nombre, apellido1, apellido2)
+                                VALUES (:id_reserva, :dni, :nombre, :apellido1, :apellido2)
+                            ");
+                            $stmt_acomp->execute([
+                                ':id_reserva' => $id_reserva,
+                                ':dni'        => sanitize_input($acomp['dni']),
+                                ':nombre'     => sanitize_input($acomp['nombre']),
+                                ':apellido1'  => sanitize_input($acomp['apellido1']),
+                                ':apellido2'  => sanitize_input($acomp['apellido2'] ?? ''),
+                            ]);
+                        }
+                    }
+                }
+
+                $conexionPDO->commit();
+
+                $_SESSION['mensaje']      = "Reserva creada y aprobada automáticamente para NO SOCIO: $nombre $apellido1";
+                $_SESSION['tipo_mensaje'] = 'success';
+
+                header("Location: viewAdmin.php?accion=reservas&tab=aprobadas");
+                exit;
+
+            } catch (Exception $e) {
+                if ($conexionPDO->inTransaction()) {
+                    $conexionPDO->rollBack();
+                }
                 $_SESSION['mensaje']      = "Error al crear reserva: " . $e->getMessage();
                 $_SESSION['tipo_mensaje'] = 'danger';
                 header("Location: viewAdmin.php?accion=reservas");
@@ -1228,6 +1461,9 @@
                             <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalReservaSocio">
                                 <i class="bi bi-person-plus"></i> Nueva Reserva Socio
                             </button>
+                            <button class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#modalReservaNoSocio">
+                                <i class="bi bi-person"></i> Nueva Reserva No Socio
+                            </button>
                             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservaEspecial">
                                 <i class="bi bi-calendar-event"></i> Nueva Reserva Especial
                             </button>
@@ -1442,16 +1678,20 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <?php foreach ($reservas_aprobadas as $reserva): ?>
+                                                <?php foreach ($reservas_aprobadas as $reserva):
+                                                        $usuario_info = mostrar_usuario_reserva($reserva);
+                                                ?>
                                                     <tr>
                                                         <td><?php echo $reserva['id'] ?></td>
                                                         <td>
-                                                            <strong><?php echo htmlspecialchars($reserva['nombre'] ? ($reserva['nombre'] . ' ' . $reserva['apellido1']) : $reserva['observaciones']) ?></strong><br>
-                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?></small>
+                                                            <strong><?php echo $usuario_info['display'] ?></strong><br>
+                                                            <?php if (! empty($usuario_info['email'])): ?>
+                                                                <small class="text-muted"><?php echo $usuario_info['email'] ?></small>
+                                                            <?php endif; ?>
                                                         </td>
                                                         <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
                                                         <td><?php echo $reserva['numero_camas'] ?></td>
-                                                        <td><?php echo htmlspecialchars($reserva['observaciones'] ?? '-') ?></td>
+                                                        <td><?php echo $usuario_info['actividad'] ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                         <td>
@@ -1693,6 +1933,148 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                         <button type="submit" class="btn btn-success" id="btnSubmitReservaSocio">
+                            <i class="bi bi-check-circle"></i> Crear Reserva
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Crear Reserva No Socio -->
+    <div class="modal fade" id="modalReservaNoSocio" tabindex="-1" aria-labelledby="modalReservaNoSocioLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="modalReservaNoSocioLabel">
+                        <i class="bi bi-person"></i> Crear Reserva para No Socio
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" id="formReservaNoSocio">
+                    <input type="hidden" name="accion" value="crear_reserva_no_socio">
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Las reservas creadas para no socios se aprueban automáticamente.
+                        </div>
+
+                        <!-- Datos Personales -->
+                        <h6 class="mb-3"><i class="bi bi-person-badge"></i> Datos Personales</h6>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">DNI *</label>
+                                <input type="text" class="form-control" name="dni" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Nombre *</label>
+                                <input type="text" class="form-control" name="nombre" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Apellido 1 *</label>
+                                <input type="text" class="form-control" name="apellido1" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Apellido 2</label>
+                                <input type="text" class="form-control" name="apellido2">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Teléfono *</label>
+                                <input type="text" class="form-control" name="telefono" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" name="email">
+                            </div>
+                        </div>
+
+                        <!-- Grupo de Montañeros -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="perteneceGrupoTenerife" name="pertenece_grupo_tenerife" checked onchange="toggleGrupoPersonalizado()">
+                                <label class="form-check-label" for="perteneceGrupoTenerife">
+                                    Pertenece al Grupo de Montañeros de Tenerife
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="grupoPersonalizadoContainer" style="display: none;">
+                            <label class="form-label">Otro Grupo o Asociación</label>
+                            <input type="text" class="form-control" name="grupo_personalizado" id="grupoPersonalizado" placeholder="Nombre del grupo o asociación...">
+                            <small class="text-muted">Si no pertenece a ningún grupo, dejar en blanco</small>
+                        </div>
+
+                        <hr>
+
+                        <!-- Datos de Reserva -->
+                        <h6 class="mb-3"><i class="bi bi-calendar"></i> Datos de Reserva</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Fecha Inicio *</label>
+                                <input type="date" class="form-control" name="fecha_inicio" required
+                                       id="fechaInicioNoSocio" min="<?php echo date('Y-m-d'); ?>">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Fecha Fin *</label>
+                                <input type="date" class="form-control" name="fecha_fin" required
+                                       id="fechaFinNoSocio" min="<?php echo date('Y-m-d'); ?>">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Habitación *</label>
+                            <select class="form-select" name="id_habitacion" required id="selectHabitacionNoSocio">
+                                <option value="">Seleccione una habitación</option>
+                                <?php
+                                    $habitaciones = obtener_todas_habitaciones($conexionPDO);
+                                foreach ($habitaciones as $hab): ?>
+                                    <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
+                                        Habitación <?php echo $hab['numero'] ?> (Capacidad: <?php echo $hab['capacidad'] ?> camas)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Número de Camas *</label>
+                            <div class="input-group">
+                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasNoSocio(-1)">
+                                    <i class="bi bi-dash"></i>
+                                </button>
+                                <input type="number" class="form-control text-center" name="numero_camas"
+                                       id="numeroCamasNoSocio" value="1" min="1" required readonly>
+                                <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasNoSocio(1)">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted" id="infoCamasNoSocio">Selecciona una habitación primero</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Actividad a Realizar *</label>
+                            <textarea class="form-control" name="actividad" required rows="3" placeholder="Describe la actividad a realizar durante la estancia..."></textarea>
+                        </div>
+
+                        <!-- Sección de Acompañantes -->
+                        <div id="seccionAcompanantesNoSocio" style="display: none;">
+                            <hr>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-people-fill"></i> Acompañantes
+                                    <span id="badgeAcompanantesNoSocio" class="badge bg-info">0/0</span>
+                                </h6>
+                                <button type="button" class="btn btn-sm btn-primary" onclick="agregarAcompananteNoSocio()" id="btnAgregarAcompananteNoSocio">
+                                    <i class="bi bi-person-plus-fill"></i> Agregar
+                                </button>
+                            </div>
+                            <div id="containerAcompanantesNoSocio">
+                                <p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar los datos de los acompañantes.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-info" id="btnSubmitReservaNoSocio">
                             <i class="bi bi-check-circle"></i> Crear Reserva
                         </button>
                     </div>
@@ -2034,6 +2416,174 @@
         // Validar fechas para reserva de socio
         document.getElementById('fechaFinSocio').addEventListener('change', function() {
             const fechaInicio = document.getElementById('fechaInicioSocio').value;
+            const fechaFin = this.value;
+
+            if (fechaInicio && fechaFin && fechaFin <= fechaInicio) {
+                alert('La fecha de fin debe ser posterior a la fecha de inicio');
+                this.value = '';
+            }
+        });
+
+        // ========== FUNCIONES PARA MODAL DE RESERVA NO SOCIO ==========
+        let maxCamasNoSocio = 1;
+        let acompanantesActualesNoSocio = 0;
+        let contadorAcompanantesNoSocio = 0;
+
+        // Toggle grupo personalizado
+        function toggleGrupoPersonalizado() {
+            const checkbox = document.getElementById('perteneceGrupoTenerife');
+            const container = document.getElementById('grupoPersonalizadoContainer');
+            const input = document.getElementById('grupoPersonalizado');
+
+            if (checkbox.checked) {
+                container.style.display = 'none';
+                input.value = '';
+            } else {
+                container.style.display = 'block';
+            }
+        }
+
+        // Event listener para cambio de habitación No Socio
+        document.getElementById('selectHabitacionNoSocio').addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption.value) {
+                maxCamasNoSocio = parseInt(selectedOption.dataset.maxCamas);
+                document.getElementById('numeroCamasNoSocio').max = maxCamasNoSocio;
+                document.getElementById('numeroCamasNoSocio').value = 1;
+                document.getElementById('infoCamasNoSocio').textContent = `Máximo ${maxCamasNoSocio} camas disponibles`;
+                actualizarSeccionAcompanantesNoSocio(1);
+            }
+        });
+
+        function cambiarCamasNoSocio(cambio) {
+            const input = document.getElementById('numeroCamasNoSocio');
+            let nuevoValor = parseInt(input.value) + cambio;
+
+            if (nuevoValor < 1) {
+                nuevoValor = 1;
+            } else if (nuevoValor > maxCamasNoSocio) {
+                nuevoValor = maxCamasNoSocio;
+            }
+
+            input.value = nuevoValor;
+            actualizarSeccionAcompanantesNoSocio(nuevoValor);
+        }
+
+        function actualizarSeccionAcompanantesNoSocio(numeroCamas) {
+            const seccion = document.getElementById('seccionAcompanantesNoSocio');
+            const container = document.getElementById('containerAcompanantesNoSocio');
+            const badge = document.getElementById('badgeAcompanantesNoSocio');
+            const btnAgregar = document.getElementById('btnAgregarAcompananteNoSocio');
+
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (numeroCamas === 1) {
+                seccion.style.display = 'none';
+                container.innerHTML = '';
+                acompanantesActualesNoSocio = 0;
+            } else {
+                seccion.style.display = 'block';
+                badge.textContent = `${acompanantesActualesNoSocio}/${acompanantesRequeridos}`;
+                container.innerHTML = '<p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar ' + acompanantesRequeridos + ' acompañante(s).</p>';
+                acompanantesActualesNoSocio = 0;
+                btnAgregar.disabled = false;
+            }
+        }
+
+        function agregarAcompananteNoSocio() {
+            const numeroCamas = parseInt(document.getElementById('numeroCamasNoSocio').value) || 1;
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (acompanantesActualesNoSocio >= acompanantesRequeridos) {
+                alert('Ya has agregado todos los acompañantes necesarios');
+                return;
+            }
+
+            contadorAcompanantesNoSocio++;
+            acompanantesActualesNoSocio++;
+
+            const container = document.getElementById('containerAcompanantesNoSocio');
+            const badge = document.getElementById('badgeAcompanantesNoSocio');
+            const btnAgregar = document.getElementById('btnAgregarAcompananteNoSocio');
+
+            badge.textContent = `${acompanantesActualesNoSocio}/${acompanantesRequeridos}`;
+
+            if (acompanantesActualesNoSocio >= acompanantesRequeridos) {
+                btnAgregar.disabled = true;
+            }
+
+            const html = `
+                <div class="border rounded p-3 mb-3" id="acompanante-no-socio-${contadorAcompanantesNoSocio}">
+                    <div class="d-flex justify-content-between mb-2">
+                        <strong><i class="bi bi-person"></i> Acompañante #${acompanantesActualesNoSocio}</strong>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarAcompananteNoSocio(${contadorAcompanantesNoSocio})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label">DNI *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesNoSocio}][dni]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nombre *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesNoSocio}][nombre]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Apellido 1 *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesNoSocio}][apellido1]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Apellido 2</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesNoSocio}][apellido2]" class="form-control form-control-sm">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            if (acompanantesActualesNoSocio === 1) {
+                container.innerHTML = html;
+            } else {
+                container.insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        function eliminarAcompananteNoSocio(id) {
+            const elemento = document.getElementById(`acompanante-no-socio-${id}`);
+            if (elemento) {
+                elemento.remove();
+                acompanantesActualesNoSocio--;
+
+                const numeroCamas = parseInt(document.getElementById('numeroCamasNoSocio').value) || 1;
+                const acompanantesRequeridos = numeroCamas - 1;
+                const badge = document.getElementById('badgeAcompanantesNoSocio');
+                const btnAgregar = document.getElementById('btnAgregarAcompananteNoSocio');
+
+                badge.textContent = `${acompanantesActualesNoSocio}/${acompanantesRequeridos}`;
+                btnAgregar.disabled = false;
+
+                const container = document.getElementById('containerAcompanantesNoSocio');
+                if (acompanantesActualesNoSocio === 0) {
+                    container.innerHTML = '<p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar ' + acompanantesRequeridos + ' acompañante(s).</p>';
+                }
+            }
+        }
+
+        // Validación obligatoria de acompañantes para No Socio
+        document.getElementById('formReservaNoSocio').addEventListener('submit', function(e) {
+            const numeroCamas = parseInt(document.getElementById('numeroCamasNoSocio').value) || 1;
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (numeroCamas > 1 && acompanantesActualesNoSocio < acompanantesRequeridos) {
+                e.preventDefault();
+                alert(`Debes agregar ${acompanantesRequeridos} acompañante(s) para completar la reserva de ${numeroCamas} camas.\n\nAcompañantes agregados: ${acompanantesActualesNoSocio}\nAcompañantes requeridos: ${acompanantesRequeridos}`);
+                return false;
+            }
+        });
+
+        // Validar fechas para No Socio
+        document.getElementById('fechaFinNoSocio').addEventListener('change', function() {
+            const fechaInicio = document.getElementById('fechaInicioNoSocio').value;
             const fechaFin = this.value;
 
             if (fechaInicio && fechaFin && fechaFin <= fechaInicio) {
