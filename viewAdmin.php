@@ -3014,7 +3014,7 @@
                         <!-- Actividad a Realizar -->
                         <div class="mb-3" id="editActividadContainer">
                             <label class="form-label">Actividad a Realizar *</label>
-                            <textarea class="form-control" name="actividad" id="editActividad" rows="3" placeholder="Describe la actividad a realizar durante la estancia..."></textarea>
+                            <textarea class="form-control" name="actividad" id="editActividad" rows="3" required placeholder="Describe la actividad a realizar durante la estancia..."></textarea>
                         </div>
 
                         <!-- Sección de Acompañantes -->

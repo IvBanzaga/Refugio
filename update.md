@@ -31,10 +31,11 @@
 
 1. Elininamos las habitaciones y usamos solo el numero de camas para hacer las reservas.
 
-Pendientes :
+
 
 1. El usuario puede tambien modificar su password desde su perfil.
 
+Pendientes :
 1. Cuando un socio realiza la solicitud de una nueva reserva , que le envie un email al administrador informandole de que un socio ha realizado una nueva solicitud de reserva , con los datos del socio y de la reserva solicitada .
 
 1. Cuando se aprueba la solicitud de reserva de un socio , que se le envie un email al socio informandole que su solicitud de reserva ha sido aprobada , con los datos de la reserva aprobada .

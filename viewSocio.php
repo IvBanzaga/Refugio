@@ -28,8 +28,6 @@
     switch ($accion) {
         case 'crear_reserva':
             try {
-                $conexionPDO->beginTransaction();
-
                 $numero_camas = isset($_POST['numero_camas']) ? (int) $_POST['numero_camas'] : 0;
                 if ($numero_camas < 1) {
                     throw new Exception("Debes reservar al menos 1 cama");
@@ -53,13 +51,16 @@
                     'numero_camas'  => $numero_camas,
                     'fecha_inicio'  => $_POST['fecha_inicio'] ?? '',
                     'fecha_fin'     => $_POST['fecha_fin'] ?? '',
+                    'actividad'     => $_POST['actividad'] ?? '',
                 ];
 
+                // crear_reserva() maneja su propia transacción
                 $id_reserva = crear_reserva($conexionPDO, $datos_reserva);
                 if (! $id_reserva) {
                     throw new Exception("Error al crear la reserva");
                 }
 
+                // Agregar acompañantes después de crear la reserva
                 foreach ($acompanantes as $acomp) {
                     if (! empty($acomp['dni'])) {
                         $datos_acomp = [
@@ -75,12 +76,8 @@
                     }
                 }
 
-                $conexionPDO->commit();
                 $mensaje = "Reserva creada exitosamente. Pendiente de aprobación por el administrador.";
             } catch (Exception $e) {
-                if ($conexionPDO->inTransaction()) {
-                    $conexionPDO->rollBack();
-                }
                 $mensaje      = "Error al crear la reserva: " . $e->getMessage();
                 $tipo_mensaje = 'danger';
             }
@@ -121,8 +118,41 @@
                     throw new Exception("La fecha de fin debe ser igual o posterior a la fecha de inicio");
                 }
 
+                // Validar acompañantes si el número de camas cambió
+                $acompanantes = $_POST['acompanantes'] ?? [];
+                if (! is_array($acompanantes)) {
+                    $acompanantes = [];
+                }
+
+                $num_acompanantes        = count($acompanantes);
+                $acompanantes_requeridos = $numero_camas - 1;
+
+                if ($num_acompanantes != $acompanantes_requeridos) {
+                    throw new Exception("Debes agregar exactamente $acompanantes_requeridos acompañante(s) para $numero_camas cama(s)");
+                }
+
                 if (! editar_reserva_usuario($conexionPDO, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)) {
                     throw new Exception("No hay suficientes camas disponibles");
+                }
+
+                // Eliminar acompañantes anteriores
+                $stmt = $conexionPDO->prepare("DELETE FROM acompanantes WHERE id_reserva = :id_reserva");
+                $stmt->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+                $stmt->execute();
+
+                // Agregar nuevos acompañantes
+                foreach ($acompanantes as $acomp) {
+                    if (! empty($acomp['dni'])) {
+                        $datos_acomp = [
+                            'num_socio' => $acomp['num_socio'] ?? null,
+                            'es_socio'  => isset($acomp['es_socio']) && $acomp['es_socio'] === 'si',
+                            'dni'       => $acomp['dni'] ?? '',
+                            'nombre'    => $acomp['nombre'] ?? '',
+                            'apellido1' => $acomp['apellido1'] ?? '',
+                            'apellido2' => $acomp['apellido2'] ?? null,
+                        ];
+                        agregar_acompanante($conexionPDO, $id_reserva, $datos_acomp);
+                    }
                 }
 
                 $conexionPDO->commit();
@@ -147,6 +177,49 @@
                 $_SESSION['email'] = htmlspecialchars($email);
             } else {
                 $mensaje      = $resultado['mensaje'] ?? 'Error al actualizar perfil';
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'perfil';
+            break;
+
+        case 'cambiar_password':
+            try {
+                $password_actual    = $_POST['password_actual'] ?? '';
+                $password_nueva     = $_POST['password_nueva'] ?? '';
+                $password_confirmar = $_POST['password_confirmar'] ?? '';
+
+                if (empty($password_actual) || empty($password_nueva) || empty($password_confirmar)) {
+                    throw new Exception("Todos los campos son obligatorios");
+                }
+
+                if ($password_nueva !== $password_confirmar) {
+                    throw new Exception("Las contraseñas nuevas no coinciden");
+                }
+
+                if (strlen($password_nueva) < 6) {
+                    throw new Exception("La contraseña debe tener al menos 6 caracteres");
+                }
+
+                // Verificar contraseña actual
+                $stmt = $conexionPDO->prepare("SELECT password FROM usuarios WHERE id = ?");
+                $stmt->execute([$_SESSION['userId']]);
+                $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if (! $usuario || ! password_verify($password_actual, $usuario['password'])) {
+                    throw new Exception("La contraseña actual es incorrecta");
+                }
+
+                // Actualizar contraseña
+                $password_hash = password_hash($password_nueva, PASSWORD_DEFAULT);
+                $stmt          = $conexionPDO->prepare("UPDATE usuarios SET password = ? WHERE id = ?");
+
+                if ($stmt->execute([$password_hash, $_SESSION['userId']])) {
+                    $mensaje = "Contraseña actualizada exitosamente";
+                } else {
+                    throw new Exception("Error al actualizar la contraseña");
+                }
+            } catch (Exception $e) {
+                $mensaje      = $e->getMessage();
                 $tipo_mensaje = 'danger';
             }
             $accion = 'perfil';
@@ -482,17 +555,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																																	                                            SELECT r.id, r.estado, h.numero as habitacion,
-																																	                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																																	                                            FROM reservas r
-																																	                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																																	                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																																	                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																																	                                            WHERE r.id_usuario = :id_usuario
-																																	                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																																	                                            AND r.estado IN ('pendiente', 'reservada')
-																																	                                            GROUP BY r.id, r.estado, h.numero
-																																	                                        ");
+																																							                                            SELECT r.id, r.estado, h.numero as habitacion,
+																																							                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																																							                                            FROM reservas r
+																																							                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																																							                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																																							                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																																							                                            WHERE r.id_usuario = :id_usuario
+																																							                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																																							                                            AND r.estado IN ('pendiente', 'reservada')
+																																							                                            GROUP BY r.id, r.estado, h.numero
+																																							                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -500,11 +573,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																																	                                            SELECT COUNT(*) as total
-																																	                                            FROM reservas
-																																	                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																																	                                            AND estado = 'reservada'
-																																	                                        ");
+																																							                                            SELECT COUNT(*) as total
+																																							                                            FROM reservas
+																																							                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																																							                                            AND estado = 'reservada'
+																																							                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -569,7 +642,7 @@
 
                     <form method="post" id="formReserva">
                         <input type="hidden" name="accion" value="crear_reserva">
-                        <input type="hidden" name="num_camas" id="hiddenNumCamas" value="1">
+                        <input type="hidden" name="numero_camas" id="hiddenNumCamas" value="1">
 
                         <div class="card shadow-sm mb-4">
                             <div class="card-header bg-success text-white">
@@ -609,16 +682,15 @@
                                     </div>
                                 </div>
                                 <input type="hidden" name="id_habitacion" id="hiddenHabitacion" value="1">
-                                <input type="hidden" name="num_camas" id="hiddenNumCamas" value="1">
                             </div>
                         </div>
 
                         <div class="card shadow-sm mb-4">
                             <div class="card-header bg-success text-white">
-                                <h5 class="mb-0">Actividad a Realizar</h5>
+                                <h5 class="mb-0">Actividad a Realizar *</h5>
                             </div>
                             <div class="card-body">
-                                <textarea name="actividad" class="form-control" rows="3"
+                                <textarea name="actividad" class="form-control" rows="3" required
                                     placeholder="Describe la actividad que realizarás durante tu estancia..."></textarea>
                             </div>
                         </div>
@@ -674,7 +746,6 @@
                                     <table class="table table-hover">
                                         <thead>
                                             <tr>
-                                                <th>Habitación</th>
                                                 <th>Nº Camas</th>
                                                 <th>Fecha Entrada</th>
                                                 <th>Fecha Salida</th>
@@ -685,7 +756,6 @@
                                         <tbody>
                                             <?php foreach ($pendientes as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             <?php echo $reserva['habitacion_numero'] ?></td>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -729,7 +799,6 @@
                                     <table class="table table-hover">
                                         <thead>
                                             <tr>
-                                                <th>Habitación</th>
                                                 <th>Nº Camas</th>
                                                 <th>Fecha Entrada</th>
                                                 <th>Fecha Salida</th>
@@ -743,7 +812,6 @@
                                                     $puede_editar = strtotime($reserva['fecha_inicio']) > strtotime(date('Y-m-d'));
                                             ?>
 					                                                <tr>
-					                                                    <td>Hab.					                                                            				                                                            			                                                            		                                                            	                                                             <?php echo $reserva['habitacion_numero'] ?></td>
 					                                                    <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
 					                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
 					                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -785,7 +853,6 @@
                                     <table class="table table-hover">
                                         <thead>
                                             <tr>
-                                                <th>Habitación</th>
                                                 <th>Nº Camas</th>
                                                 <th>Fecha Entrada</th>
                                                 <th>Fecha Salida</th>
@@ -794,7 +861,6 @@
                                         <tbody>
                                             <?php foreach ($canceladas as $reserva): ?>
                                                 <tr>
-                                                    <td>Hab.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             <?php echo $reserva['habitacion_numero'] ?></td>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                     <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -946,6 +1012,54 @@
                                     </form>
                                 </div>
                             </div>
+
+                            <!-- Cambiar Contraseña -->
+                            <div class="card shadow-sm mt-4">
+                                <div class="card-header bg-warning text-dark">
+                                    <h5 class="mb-0"><i class="bi bi-shield-lock-fill"></i> Cambiar Contraseña</h5>
+                                </div>
+                                <div class="card-body">
+                                    <form method="POST" id="formCambiarPassword">
+                                        <input type="hidden" name="accion" value="cambiar_password">
+
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Contraseña Actual: <span class="text-danger">*</span></label>
+                                            <input type="password"
+                                                class="form-control"
+                                                name="password_actual"
+                                                required
+                                                placeholder="Ingresa tu contraseña actual">
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Nueva Contraseña: <span class="text-danger">*</span></label>
+                                            <input type="password"
+                                                class="form-control"
+                                                name="password_nueva"
+                                                id="password_nueva"
+                                                required
+                                                minlength="6"
+                                                placeholder="Mínimo 6 caracteres">
+                                            <small class="text-muted">La contraseña debe tener al menos 6 caracteres</small>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Confirmar Nueva Contraseña: <span class="text-danger">*</span></label>
+                                            <input type="password"
+                                                class="form-control"
+                                                name="password_confirmar"
+                                                id="password_confirmar"
+                                                required
+                                                minlength="6"
+                                                placeholder="Repite la nueva contraseña">
+                                        </div>
+
+                                        <button type="submit" class="btn btn-warning">
+                                            <i class="bi bi-shield-check"></i> Cambiar Contraseña
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 <?php endif; ?>
@@ -1002,10 +1116,26 @@
                                 </button>
                             </div>
                             <small class="text-muted" id="editInfoCamasUsuario"></small>
+                            <small class="text-muted mt-2 d-block" id="editInfoAcompanantesUsuario">
+                                Selecciona las fechas y camas para gestionar acompañantes
+                            </small>
                         </div>
 
-                        <div class="alert alert-warning">
-                            <strong>Nota:</strong> Al cambiar el número de camas, deberás actualizar tus acompañantes después de la aprobación.
+                        <!-- Sección de Acompañantes -->
+                        <div id="cardAcompanantesEditar" style="display: none;">
+                            <hr>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-people-fill"></i> Acompañantes
+                                    <span id="acompanantesRequeridosEditar" class="badge bg-secondary ms-2"></span>
+                                </h6>
+                                <button type="button" class="btn btn-sm btn-success" onclick="agregarAcompananteEditar()" id="btnAgregarAcompananteEditar">
+                                    <i class="bi bi-person-plus-fill"></i> Agregar Acompañante
+                                </button>
+                            </div>
+                            <div id="acompanantesContainerEditar">
+                                <!-- Los acompañantes se agregarán dinámicamente aquí -->
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -1157,11 +1287,9 @@
                             onChange: function(selectedDates, dateStr, instance) {
                                 actualizarDisponibilidad();
 
-                                // Actualizar fecha mínima de salida
+                                // Actualizar fecha mínima de salida (puede ser el mismo día)
                                 if (selectedDates.length > 0) {
-                                    const minSalida = new Date(selectedDates[0]);
-                                    minSalida.setDate(minSalida.getDate() + 1);
-                                    fpFin.set('minDate', minSalida);
+                                    fpFin.set('minDate', selectedDates[0]);
                                 }
                             }
                         });
@@ -1212,11 +1340,9 @@
                                 }
                             },
                             onChange: function(selectedDates, dateStr, instance) {
-                                // Actualizar fecha mínima de salida
+                                // Actualizar fecha mínima de salida (puede ser el mismo día)
                                 if (selectedDates.length > 0) {
-                                    const minSalida = new Date(selectedDates[0]);
-                                    minSalida.setDate(minSalida.getDate() + 1);
-                                    window.fpEditFin.set('minDate', minSalida);
+                                    window.fpEditFin.set('minDate', selectedDates[0]);
                                 }
                             }
                         });
@@ -1320,12 +1446,15 @@
             const infoElement = document.getElementById('infoAcompanantes');
             const acompanantesRequeridos = numeroCamasActual - 1;
 
+            // Mensaje de disponibilidad (siempre visible)
+            let mensajeDisponibilidad = `<i class="bi bi-check-circle-fill"></i> Hay ${camasDisponiblesMax} cama${camasDisponiblesMax !== 1 ? 's' : ''} disponible${camasDisponiblesMax !== 1 ? 's' : ''} para estas fechas`;
+
             if (numeroCamasActual === 1) {
-                infoElement.innerHTML = '<i class="bi bi-info-circle"></i> Solo para ti (sin acompañantes)';
-                infoElement.className = 'text-muted mt-2 d-block';
+                infoElement.innerHTML = mensajeDisponibilidad + '<br><i class="bi bi-info-circle"></i> Solo para ti (sin acompañantes)';
+                infoElement.className = 'text-success mt-2 d-block';
             } else {
-                infoElement.innerHTML = `<i class="bi bi-exclamation-circle"></i> Debes agregar <strong>${acompanantesRequeridos} acompañante(s)</strong>`;
-                infoElement.className = 'text-warning mt-2 d-block';
+                infoElement.innerHTML = mensajeDisponibilidad + `<br><i class="bi bi-exclamation-circle"></i> Debes agregar <strong>${acompanantesRequeridos} acompañante(s)</strong>`;
+                infoElement.className = 'text-success mt-2 d-block';
             }
         }
 
@@ -1424,6 +1553,26 @@
         let emailOriginal = '';
         let telefonoOriginal = '';
 
+        // Validación de cambio de contraseña
+        document.getElementById('formCambiarPassword')?.addEventListener('submit', function(e) {
+            const passwordNueva = document.getElementById('password_nueva').value;
+            const passwordConfirmar = document.getElementById('password_confirmar').value;
+
+            if (passwordNueva !== passwordConfirmar) {
+                e.preventDefault();
+                alert('❌ Las contraseñas nuevas no coinciden. Por favor, verifica e intenta de nuevo.');
+                return false;
+            }
+
+            if (passwordNueva.length < 6) {
+                e.preventDefault();
+                alert('❌ La contraseña debe tener al menos 6 caracteres.');
+                return false;
+            }
+
+            return confirm('¿Estás seguro de que deseas cambiar tu contraseña?');
+        });
+
         function habilitarEdicion() {
             const inputEmail = document.getElementById('inputEmail');
             const inputTelefono = document.getElementById('inputTelefono');
@@ -1494,11 +1643,21 @@
             maxCamasEditUsuario = 26;
             document.getElementById('editInfoCamasUsuario').textContent = `Máximo ${maxCamasEditUsuario} camas disponibles`;
 
+            // Limpiar acompañantes anteriores
+            document.getElementById('acompanantesContainerEditar').innerHTML = '';
+            acompanantesActualesEditar = 0;
+            contadorAcompanantesEditar = 0;
+
+            // Actualizar info de acompañantes
+            actualizarInfoAcompanantesEditar();
+
             modal.show();
         }
 
         // Variables para edición de usuario
         let maxCamasEditUsuario = 26; // Capacidad fija de habitación 1
+        let contadorAcompanantesEditar = 0;
+        let acompanantesActualesEditar = 0;
 
         function cambiarCamasEditUsuario(cambio) {
             const input = document.getElementById('editNumeroCamasUsuario');
@@ -1511,6 +1670,113 @@
             }
 
             input.value = nuevoValor;
+            actualizarInfoAcompanantesEditar();
+        }
+
+        function actualizarInfoAcompanantesEditar() {
+            const numeroCamas = parseInt(document.getElementById('editNumeroCamasUsuario').value) || 0;
+            const acompanantesRequeridos = numeroCamas - 1;
+            const cardAcompanantes = document.getElementById('cardAcompanantesEditar');
+            const infoAcompanantes = document.getElementById('editInfoAcompanantesUsuario');
+
+            if (acompanantesRequeridos > 0) {
+                cardAcompanantes.style.display = 'block';
+                const badge = document.getElementById('acompanantesRequeridosEditar');
+                badge.textContent = `${acompanantesActualesEditar}/${acompanantesRequeridos} agregados`;
+
+                // Actualizar info
+                const diferencia = acompanantesRequeridos - acompanantesActualesEditar;
+                if (diferencia > 0) {
+                    infoAcompanantes.innerHTML = `Debes agregar ${diferencia} acompañante(s)`;
+                    infoAcompanantes.className = 'text-danger mt-2 d-block';
+                } else {
+                    infoAcompanantes.innerHTML = `Todos los acompañantes agregados`;
+                    infoAcompanantes.className = 'text-success mt-2 d-block';
+                }
+
+                // Controlar botón agregar
+                const btnAgregar = document.getElementById('btnAgregarAcompananteEditar');
+                btnAgregar.disabled = acompanantesActualesEditar >= acompanantesRequeridos;
+            } else {
+                cardAcompanantes.style.display = 'none';
+                // Limpiar acompañantes si solo hay 1 cama
+                document.getElementById('acompanantesContainerEditar').innerHTML = '';
+                acompanantesActualesEditar = 0;
+                contadorAcompanantesEditar = 0;
+                infoAcompanantes.innerHTML = 'Una cama no requiere acompañantes';
+                infoAcompanantes.className = 'text-muted mt-2 d-block';
+            }
+        }
+
+        function agregarAcompananteEditar() {
+            const numeroCamas = parseInt(document.getElementById('editNumeroCamasUsuario').value) || 0;
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (acompanantesActualesEditar >= acompanantesRequeridos) {
+                alert(`Solo puedes agregar ${acompanantesRequeridos} acompañante(s) para ${numeroCamas} cama(s).`);
+                return;
+            }
+
+            contadorAcompanantesEditar++;
+            acompanantesActualesEditar++;
+
+            const container = document.getElementById('acompanantesContainerEditar');
+
+            const html = `
+                <div class="acompanante-row border-bottom pb-3 mb-3" id="acompanante-editar-${contadorAcompanantesEditar}">
+                    <div class="d-flex justify-content-between mb-2">
+                        <h6 class="text-success"><i class="bi bi-person"></i> Acompañante #${acompanantesActualesEditar}</h6>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarAcompananteEditar(${contadorAcompanantesEditar})">
+                            <i class="bi bi-trash"></i> Eliminar
+                        </button>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label">¿Es socio?</label>
+                            <select name="acompanantes[${contadorAcompanantesEditar}][es_socio]" class="form-select"
+                                    onchange="toggleNumSocioEditar(${contadorAcompanantesEditar})">
+                                <option value="no">No</option>
+                                <option value="si">Sí</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-2" id="numSocioDivEditar-${contadorAcompanantesEditar}" style="display:none">
+                            <label class="form-label">Nº Socio</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][num_socio]" class="form-control">
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label">DNI *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][dni]" class="form-control" required>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label">Nombre *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][nombre]" class="form-control" required>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label">Apellido 1 *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][apellido1]" class="form-control" required>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label">Apellido 2</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][apellido2]" class="form-control">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.insertAdjacentHTML('beforeend', html);
+            actualizarInfoAcompanantesEditar();
+        }
+
+        function eliminarAcompananteEditar(id) {
+            document.getElementById(`acompanante-editar-${id}`).remove();
+            acompanantesActualesEditar--;
+            actualizarInfoAcompanantesEditar();
+        }
+
+        function toggleNumSocioEditar(id) {
+            const select = document.querySelector(`select[name="acompanantes[${id}][es_socio]"]`);
+            const div = document.getElementById(`numSocioDivEditar-${id}`);
+            div.style.display = select.value === 'si' ? 'block' : 'none';
         }
 
         // Actualizar max camas cuando cambie habitación - COMENTADO (habitación 1 siempre)
@@ -1525,6 +1791,32 @@
             });
         }
         */
+
+        // Validación del formulario de edición de reserva
+        const formEditarReservaUsuario = document.getElementById('formEditarReservaUsuario');
+        if (formEditarReservaUsuario) {
+            formEditarReservaUsuario.addEventListener('submit', function(e) {
+                const numeroCamas = parseInt(document.getElementById('editNumeroCamasUsuario').value) || 0;
+                const acompanantesRequeridos = numeroCamas - 1;
+
+                if (acompanantesRequeridos > 0 && acompanantesActualesEditar !== acompanantesRequeridos) {
+                    e.preventDefault();
+                    alert(`Debes agregar exactamente ${acompanantesRequeridos} acompañante(s) para ${numeroCamas} cama(s)`);
+                    return false;
+                }
+            });
+        }
+
+        // Listener para cuando se cierra el modal de edición
+        const modalEditarReservaUsuario = document.getElementById('modalEditarReservaUsuario');
+        if (modalEditarReservaUsuario) {
+            modalEditarReservaUsuario.addEventListener('hidden.bs.modal', function () {
+                // Limpiar acompañantes al cerrar el modal
+                document.getElementById('acompanantesContainerEditar').innerHTML = '';
+                acompanantesActualesEditar = 0;
+                contadorAcompanantesEditar = 0;
+            });
+        }
 
         // Función para ir a reserva con fecha preseleccionada
         function irAReserva(fecha) {
