@@ -1621,14 +1621,6 @@
                                             <thead>
                                                 <tr>
                                                     <th>
-                                                        <a href="?accion=reservas&tab=pendientes&sort=id&dir=<?php echo($sort === 'id' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
-                                                            ID <?php if ($sort === 'id') {
-                                                                       echo($order_dir === 'ASC' ? '▲' : '▼');
-                                                                   }
-                                                               ?>
-                                                        </a>
-                                                    </th>
-                                                    <th>
                                                         <a href="?accion=reservas&tab=pendientes&sort=nombre&dir=<?php echo($sort === 'nombre' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
                                                             Usuario <?php if ($sort === 'nombre') {
                                                                             echo($order_dir === 'ASC' ? '▲' : '▼');
@@ -1636,7 +1628,6 @@
                                                                     ?>
                                                         </a>
                                                     </th>
-                                                    <th>Habitación</th>
                                                     <th>Camas</th>
                                                     <th>
                                                         <a href="?accion=reservas&tab=pendientes&sort=fecha_inicio&dir=<?php echo($sort === 'fecha_inicio' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
@@ -1660,12 +1651,10 @@
                                             <tbody>
                                                 <?php foreach ($reservas_pendientes as $reserva): ?>
                                                     <tr>
-                                                        <td><?php echo $reserva['id'] ?></td>
                                                         <td>
                                                             <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
                                                             <small class="text-muted"><?php echo htmlspecialchars($reserva['email']) ?></small>
                                                         </td>
-                                                        <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
                                                         <td><?php echo $reserva['numero_camas'] ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
@@ -1745,14 +1734,6 @@
                                             <thead>
                                                 <tr>
                                                     <th>
-                                                        <a href="?accion=reservas&tab=aprobadas&sort=id&dir=<?php echo($sort === 'id' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
-                                                            ID <?php if ($sort === 'id') {
-                                                                       echo($order_dir === 'ASC' ? '▲' : '▼');
-                                                                   }
-                                                               ?>
-                                                        </a>
-                                                    </th>
-                                                    <th>
                                                         <a href="?accion=reservas&tab=aprobadas&sort=nombre&dir=<?php echo($sort === 'nombre' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
                                                             Usuario <?php if ($sort === 'nombre') {
                                                                             echo($order_dir === 'ASC' ? '▲' : '▼');
@@ -1760,7 +1741,6 @@
                                                                     ?>
                                                         </a>
                                                     </th>
-                                                    <th>Habitación</th>
                                                     <th>Camas</th>
                                                     <th>Actividad</th>
                                                     <th>Montañero</th>
@@ -1788,11 +1768,9 @@
                                                         $usuario_info = mostrar_usuario_reserva($reserva);
                                                 ?>
                                                     <tr>
-                                                        <td><?php echo $reserva['id'] ?></td>
                                                         <td>
                                                             <strong><?php echo $usuario_info['display'] ?></strong>
                                                         </td>
-                                                        <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
                                                         <td><?php echo $reserva['numero_camas'] ?></td>
                                                         <td><?php echo $usuario_info['actividad'] ?></td>
                                                         <td><?php echo $usuario_info['montanero'] ?></td>
@@ -1886,14 +1864,6 @@
                                                             <input type="checkbox" class="form-check-input" id="selectAllCheckbox" onchange="toggleSelectAll()">
                                                         </th>
                                                         <th>
-                                                            <a href="?accion=reservas&tab=canceladas&sort=id&dir=<?php echo($sort === 'id' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
-                                                                ID <?php if ($sort === 'id') {
-                                                                           echo($order_dir === 'ASC' ? '▲' : '▼');
-                                                                       }
-                                                                   ?>
-                                                            </a>
-                                                        </th>
-                                                        <th>
                                                             <a href="?accion=reservas&tab=canceladas&sort=nombre&dir=<?php echo($sort === 'nombre' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
                                                                 Usuario <?php if ($sort === 'nombre') {
                                                                                 echo($order_dir === 'ASC' ? '▲' : '▼');
@@ -1901,7 +1871,6 @@
                                                                         ?>
                                                             </a>
                                                         </th>
-                                                        <th>Habitación</th>
                                                         <th>Camas</th>
                                                         <th>
                                                             <a href="?accion=reservas&tab=canceladas&sort=fecha_inicio&dir=<?php echo($sort === 'fecha_inicio' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
@@ -1927,12 +1896,10 @@
                                                             <td>
                                                                 <input type="checkbox" class="form-check-input reserva-checkbox" name="ids_reservas[]" value="<?php echo $reserva['id'] ?>" onchange="actualizarContador()">
                                                             </td>
-                                                            <td><?php echo $reserva['id'] ?></td>
                                                             <td>
                                                                 <strong><?php echo htmlspecialchars($reserva['nombre'] ? ($reserva['nombre'] . ' ' . $reserva['apellido1']) : $reserva['observaciones']) ?></strong><br>
                                                                 <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?></small>
                                                             </td>
-                                                            <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
                                                             <td><?php echo $reserva['numero_camas'] ?></td>
                                                             <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                             <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
