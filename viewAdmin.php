@@ -23,10 +23,31 @@
         $campos = explode('|', $datos_personales);
         $nombre = isset($campos[1]) ? $campos[1] : 'No Socio';
 
+        // Extraer grupo de montañeros
+        $grupo = '';
+        foreach ($campos as $campo) {
+            if (strpos($campo, 'Grupo:') === 0) {
+                $grupo = str_replace('Grupo:', '', $campo);
+                break;
+            }
+        }
+
+        // Determinar montañero
+        $montanero = 'Otro';
+        if (! empty($grupo)) {
+            if ($grupo === 'Grupo de Montañeros de Tenerife') {
+                $montanero = 'GMT';
+            } else {
+                $montanero = $grupo;
+            }
+        }
+
         return [
             'es_no_socio'     => true,
             'nombre'          => $nombre,
             'actividad'       => $actividad,
+            'grupo'           => $grupo,
+            'montanero'       => $montanero,
             'datos_completos' => $observaciones,
         ];
     }
@@ -66,6 +87,7 @@
             'display'   => htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']),
             'email'     => htmlspecialchars($reserva['email'] ?? ''),
             'actividad' => htmlspecialchars($reserva['observaciones'] ?? '-'),
+            'montanero' => 'GMT',
         ];
     }
 
@@ -77,14 +99,34 @@
             'display'   => '🎫 NO SOCIO: ' . htmlspecialchars($datos_no_socio['nombre']),
             'email'     => '',
             'actividad' => htmlspecialchars($datos_no_socio['actividad']),
+            'montanero' => htmlspecialchars($datos_no_socio['montanero'] ?? 'Otro'),
         ];
     }
 
     // Es una reserva especial (TODO EL REFUGIO, etc)
+    // Verificar si tiene información de grupo
+    $montanero_especial = '-';
+    $motivo_display     = $reserva['observaciones'] ?? '-';
+
+    if (! empty($reserva['observaciones']) && strpos($reserva['observaciones'], '|Grupo:') !== false) {
+        $partes         = explode('|Grupo:', $reserva['observaciones']);
+        $motivo_display = $partes[0];
+        $grupo          = isset($partes[1]) ? $partes[1] : '';
+
+        if ($grupo === 'Grupo de Montañeros de Tenerife') {
+            $montanero_especial = 'GMT';
+        } elseif (! empty($grupo)) {
+            $montanero_especial = $grupo;
+        } else {
+            $montanero_especial = 'Otro';
+        }
+    }
+
     return [
-        'display'   => '🎫 ESPECIAL: ' . htmlspecialchars($reserva['observaciones']),
+        'display'   => '🎫 ESPECIAL: ' . htmlspecialchars($motivo_display),
         'email'     => '',
-        'actividad' => htmlspecialchars($reserva['observaciones'] ?? '-'),
+        'actividad' => htmlspecialchars($motivo_display),
+        'montanero' => htmlspecialchars($montanero_especial),
     ];
     }
 
@@ -334,6 +376,23 @@
                 'numero_camas'  => (int) $_POST['numero_camas'],
             ];
 
+            // Determinar grupo de montañeros
+            $grupo = '';
+            if (isset($_POST['pertenece_grupo_tenerife_especial']) && $_POST['pertenece_grupo_tenerife_especial'] === 'on') {
+                $grupo = 'Grupo de Montañeros de Tenerife';
+            } elseif (! empty($_POST['grupo_personalizado_especial'])) {
+                $grupo = sanitize_input($_POST['grupo_personalizado_especial']);
+            }
+
+            // Verificar si se asigna a un socio específico
+            $id_usuario_especial = isset($_POST['id_usuario_especial']) && ! empty($_POST['id_usuario_especial']) ? (int) $_POST['id_usuario_especial'] : null;
+
+            // Crear motivo con grupo si existe
+            $motivo_completo = $datos['motivo'];
+            if (! empty($grupo)) {
+                $motivo_completo .= '|Grupo:' . $grupo;
+            }
+
             // Validar fechas
             if ($datos['fecha_inicio'] > $datos['fecha_fin']) {
                 $mensaje      = "La fecha de fin debe ser igual o posterior a la fecha de inicio";
@@ -344,7 +403,9 @@
             } else {
                 // Si id_habitacion es 0, es "Todo el Refugio"
                 if ($datos['id_habitacion'] === 0) {
-                    $resultado = crear_reserva_todo_refugio($conexionPDO, $datos);
+                    $datos['motivo']     = $motivo_completo;
+                    $datos['id_usuario'] = $id_usuario_especial;
+                    $resultado           = crear_reserva_todo_refugio($conexionPDO, $datos);
                     if ($resultado) {
                         $mensaje = "Reserva especial creada para TODO EL REFUGIO: " . htmlspecialchars($datos['motivo']);
                     } else {
@@ -353,6 +414,8 @@
                     }
                 } else {
                     // Crear reserva especial para habitación individual
+                    $datos['motivo']     = $motivo_completo;
+                    $datos['id_usuario'] = $id_usuario_especial;
                     if (crear_reserva_especial_admin($conexionPDO, $datos)) {
                         $mensaje = "Reserva especial creada exitosamente: " . htmlspecialchars($datos['motivo']);
                     } else {
@@ -637,9 +700,9 @@
             break;
 
         case 'export_usuarios_csv':
-            $search = $_GET['search'] ?? '';
-            $sort   = $_GET['sort'] ?? 'num_socio';
-            $dir    = $_GET['dir'] ?? 'ASC';
+            $search  = $_GET['search'] ?? '';
+            $sort    = $_GET['sort'] ?? 'num_socio';
+            $dir     = $_GET['dir'] ?? 'ASC';
 
             export_usuarios_csv($conexionPDO, [
                 'search'    => $search,
@@ -1703,6 +1766,7 @@
                                                     <th>Habitación</th>
                                                     <th>Camas</th>
                                                     <th>Actividad</th>
+                                                    <th>Montañero</th>
                                                     <th>
                                                         <a href="?accion=reservas&tab=aprobadas&sort=fecha_inicio&dir=<?php echo($sort === 'fecha_inicio' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
                                                             Entrada <?php if ($sort === 'fecha_inicio') {
@@ -1737,6 +1801,7 @@
                                                         <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
                                                         <td><?php echo $reserva['numero_camas'] ?></td>
                                                         <td><?php echo $usuario_info['actividad'] ?></td>
+                                                        <td><?php echo $usuario_info['montanero'] ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                         <td>
@@ -2068,13 +2133,13 @@
                         <!-- Grupo de Montañeros -->
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="perteneceGrupoTenerife" name="pertenece_grupo_tenerife" checked onchange="toggleGrupoPersonalizado()">
+                                <input class="form-check-input" type="checkbox" id="perteneceGrupoTenerife" name="pertenece_grupo_tenerife" onchange="toggleGrupoPersonalizado()">
                                 <label class="form-check-label" for="perteneceGrupoTenerife">
                                     Pertenece al Grupo de Montañeros de Tenerife
                                 </label>
                             </div>
                         </div>
-                        <div class="mb-3" id="grupoPersonalizadoContainer" style="display: none;">
+                        <div class="mb-3" id="grupoPersonalizadoContainer" style="display: block;">
                             <label class="form-label">Otro Grupo o Asociación</label>
                             <input type="text" class="form-control" name="grupo_personalizado" id="grupoPersonalizado" placeholder="Nombre del grupo o asociación...">
                             <small class="text-muted">Si no pertenece a ningún grupo, dejar en blanco</small>
@@ -2181,6 +2246,56 @@
                             <input type="text" class="form-control" name="motivo" required
                                    placeholder="Ej: Evento especial, Mantenimiento, etc.">
                         </div>
+
+                        <!-- Asignar a un socio específico (opcional) -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="asignarSocioEspecial" onchange="toggleSocioEspecial()">
+                                <label class="form-check-label" for="asignarSocioEspecial">
+                                    Asignar a un socio específico
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="socioEspecialContainer" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">Buscar Socio</label>
+                                <input type="text" class="form-control mb-2" id="buscarSocioEspecial" placeholder="Buscar por nombre, apellidos o teléfono...">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Socio</label>
+                                <select class="form-select" name="id_usuario_especial" id="selectSocioEspecial">
+                                    <option value="">Seleccione un socio</option>
+                                    <?php
+                                        $stmt = $conexionPDO->prepare("SELECT id, num_socio, nombre, apellido1, apellido2, telf FROM usuarios WHERE rol = 'user' ORDER BY num_socio");
+                                        $stmt->execute();
+                                        $socios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                                    foreach ($socios as $socio): ?>
+                                        <option value="<?php echo $socio['id'] ?>" data-nombre="<?php echo strtolower($socio['nombre'] . ' ' . $socio['apellido1'] . ' ' . $socio['apellido2']) ?>" data-telf="<?php echo $socio['telf'] ?>">
+                                            <?php echo $socio['nombre'] ?> <?php echo $socio['apellido1'] ?> <?php echo $socio['apellido2'] ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Grupo de Montañeros -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="perteneceGrupoTenerifeEspecial" name="pertenece_grupo_tenerife_especial" onchange="toggleGrupoPersonalizadoEspecial()">
+                                <label class="form-check-label" for="perteneceGrupoTenerifeEspecial">
+                                    Pertenece al Grupo de Montañeros de Tenerife
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="grupoPersonalizadoContainerEspecial" style="display: block;">
+                            <label class="form-label">Otro Grupo o Asociación</label>
+                            <input type="text" class="form-control" name="grupo_personalizado_especial" id="grupoPersonalizadoEspecial" placeholder="Nombre del grupo o asociación...">
+                            <small class="text-muted">Si no pertenece a ningún grupo, dejar en blanco</small>
+                        </div>
+
+                        <hr>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
@@ -2536,6 +2651,74 @@
             }
         }
 
+        // Toggle grupo personalizado para Reserva Especial
+        function toggleGrupoPersonalizadoEspecial() {
+            const checkbox = document.getElementById('perteneceGrupoTenerifeEspecial');
+            const container = document.getElementById('grupoPersonalizadoContainerEspecial');
+            const input = document.getElementById('grupoPersonalizadoEspecial');
+
+            if (checkbox.checked) {
+                container.style.display = 'none';
+                input.value = '';
+            } else {
+                container.style.display = 'block';
+            }
+        }
+
+        // Toggle selector de socio en Reserva Especial
+        function toggleSocioEspecial() {
+            const checkbox = document.getElementById('asignarSocioEspecial');
+            const container = document.getElementById('socioEspecialContainer');
+            const select = document.getElementById('selectSocioEspecial');
+
+            if (checkbox.checked) {
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+                select.value = '';
+            }
+        }
+
+        // Funcionalidad de búsqueda de socios para Reserva Especial
+        document.getElementById('buscarSocioEspecial').addEventListener('input', function() {
+            const searchText = this.value.toLowerCase().trim();
+            const select = document.getElementById('selectSocioEspecial');
+            const options = select.querySelectorAll('option');
+            let visibleOptions = [];
+            let exactMatch = null;
+
+            options.forEach(option => {
+                if (option.value === '') {
+                    option.style.display = 'block';
+                    return;
+                }
+
+                const nombre = option.dataset.nombre || '';
+                const telf = option.dataset.telf || '';
+
+                if (nombre.includes(searchText) || telf.includes(searchText)) {
+                    option.style.display = 'block';
+                    visibleOptions.push(option);
+
+                    // Verificar coincidencia exacta
+                    if (nombre === searchText || telf === searchText) {
+                        exactMatch = option;
+                    }
+                } else {
+                    option.style.display = 'none';
+                }
+            });
+
+            // Autoseleccionar si hay coincidencia exacta o solo una opción visible
+            if (searchText && exactMatch) {
+                select.value = exactMatch.value;
+            } else if (searchText && visibleOptions.length === 1) {
+                select.value = visibleOptions[0].value;
+            } else if (!searchText) {
+                select.value = '';
+            }
+        });
+
         // Event listener para cambio de habitación No Socio
         document.getElementById('selectHabitacionNoSocio').addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
@@ -2710,6 +2893,18 @@
                             <input type="text" class="form-control" id="editUsuario" readonly>
                         </div>
 
+                        <!-- Teléfono y Email -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Teléfono</label>
+                                <input type="text" class="form-control" id="editTelefono" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" id="editEmail" readonly>
+                            </div>
+                        </div>
+
                         <!-- Fechas -->
                         <div class="row">
                             <div class="col-md-6 mb-3">
@@ -2822,8 +3017,33 @@
 
             if (esEspecial) {
                 document.getElementById('editUsuario').value = '🎫 RESERVA ESPECIAL: ' + (reserva.observaciones || 'Sin motivo');
+                // Para reservas especiales, intentar extraer datos de no socio
+                const observaciones = reserva.observaciones || '';
+                if (observaciones.includes('Tel:')) {
+                    const telMatch = observaciones.match(/Tel:([^|]+)/);
+                    if (telMatch) {
+                        document.getElementById('editTelefono').value = telMatch[1].trim();
+                    } else {
+                        document.getElementById('editTelefono').value = '-';
+                    }
+                } else {
+                    document.getElementById('editTelefono').value = '-';
+                }
+
+                if (observaciones.includes('Email:')) {
+                    const emailMatch = observaciones.match(/Email:([^|]+)/);
+                    if (emailMatch) {
+                        document.getElementById('editEmail').value = emailMatch[1].trim();
+                    } else {
+                        document.getElementById('editEmail').value = '-';
+                    }
+                } else {
+                    document.getElementById('editEmail').value = '-';
+                }
             } else {
                 document.getElementById('editUsuario').value = reserva.nombre + ' ' + reserva.apellido1 + ' (' + reserva.num_socio + ')';
+                document.getElementById('editTelefono').value = reserva.telf || '-';
+                document.getElementById('editEmail').value = reserva.email || '-';
             }
 
             // Habitación

@@ -16,3 +16,13 @@
 1 .El email tambien tiene que ser obligatorio al crear un nuevo socio y tambien al realizar una nueva reserva de no socio .
 
 2. Los botones de Gestion de Resrevas ( Nueva Reserva socio, Nueva Reserna de No Socio y Nueva Reserva Especial) , tambien tienen que aparecer arriba del todo del Dashboard principal .
+
+1. en las reservas añadi un nuevo atributo despues de Actividad que se llame Montañero, cuando se hacer una reserva de no socio , si se tiene marca la opcion de grupo de montañero de tenerife  aparecera GMT , si no rellena nada pondra otro y si pone el nombre del grupo al que pertenece que aparesca el nombre .
+
+1. los usuarios registrados por defecto son del grupo de montañeros de tenerife, con lo cual en el atributo Montañero a sus reservas le debe de aparecer GMT
+
+1. En nueva reserva Espceial , tambien añadimos si es del Gmt o de otro y una opcion si quedemos añadir esta reserva especial a un socio especifico o no
+
+1. Asignar a un socio específico una reserva especial o a un grupo o asociacion , esta bien marcarlo pero que se pueba buscar o seleccionar de la lista de socios , como cuando se realiza una reserva para una socio.
+
+1. Al editar una reservas de no socio , de socios o reservas espcial  tambien que muestre su telefono y email.
