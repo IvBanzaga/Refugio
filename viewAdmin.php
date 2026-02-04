@@ -8,296 +8,366 @@
 
     /* TODO: Comprobación de autenticación y rol. Se usa session_regenerate_id(true) para evitar robo de sesión (fijación de sesión). Depuración: puedes poner breakpoint aquí para comprobar el estado de $_SESSION. */
     if (! isset($_SESSION['userId']) || $_SESSION['rol'] !== 'admin') {
-        header('Location: login.php');
-        exit;
+    header('Location: login.php');
+    exit;
     }
     session_regenerate_id(true); // Justificación: previene ataques de fijación de sesión
 
-    $mensaje      = '';
-    $tipo_mensaje = 'success';
-    $accion       = isset($_POST['accion']) ? $_POST['accion'] : (isset($_GET['accion']) ? $_GET['accion'] : 'dashboard');
+    // Recuperar mensajes de la sesión (patrón PRG - Post-Redirect-Get)
+    $mensaje      = $_SESSION['mensaje'] ?? '';
+    $tipo_mensaje = $_SESSION['tipo_mensaje'] ?? 'success';
+    unset($_SESSION['mensaje'], $_SESSION['tipo_mensaje']);
+
+    $accion = isset($_POST['accion']) ? $_POST['accion'] : (isset($_GET['accion']) ? $_GET['accion'] : 'dashboard');
 
     /* TODO: Procesar acciones del panel admin. Todas las acciones usan POST para mayor seguridad.
        Depuración: breakpoint útil para ver los datos recibidos por POST. */
 
     // Procesar acciones de usuarios
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        switch ($accion) {
-            case 'crear_usuario':
-                $datos = [
-                    'num_socio' => sanitize_input($_POST['num_socio']),
-                    'dni'       => sanitize_input($_POST['dni']),
-                    'telf'      => sanitize_input($_POST['telf']),
-                    'email'     => sanitize_input($_POST['email']),
-                    'nombre'    => sanitize_input($_POST['nombre']),
-                    'apellido1' => sanitize_input($_POST['apellido1']),
-                    'apellido2' => sanitize_input($_POST['apellido2']),
-                    'password'  => $_POST['password'],
-                    'rol'       => sanitize_input($_POST['rol']),
-                ];
+    switch ($accion) {
+        case 'crear_usuario':
+            $datos = [
+                'num_socio' => sanitize_input($_POST['num_socio']),
+                'dni'       => sanitize_input($_POST['dni']),
+                'telf'      => sanitize_input($_POST['telf']),
+                'email'     => sanitize_input($_POST['email']),
+                'nombre'    => sanitize_input($_POST['nombre']),
+                'apellido1' => sanitize_input($_POST['apellido1']),
+                'apellido2' => sanitize_input($_POST['apellido2']),
+                'password'  => $_POST['password'],
+                'rol'       => sanitize_input($_POST['rol']),
+            ];
 
-                if (crear_usuario($conexionPDO, $datos)) {
-                    $mensaje = "Usuario creado exitosamente";
-                } else {
-                    $mensaje      = "Error al crear el usuario";
-                    $tipo_mensaje = 'danger';
-                }
-                $accion = 'usuarios';
+            if (crear_usuario($conexionPDO, $datos)) {
+                $mensaje = "Usuario creado exitosamente";
+            } else {
+                $mensaje      = "Error al crear el usuario";
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'usuarios';
+            break;
+
+        case 'actualizar_usuario':
+            $id = (int) $_POST['id'];
+
+            // Proteger al usuario admin principal
+            $usuario_actual = obtener_usuario($conexionPDO, $id);
+            if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
+                $mensaje      = "No se puede modificar el usuario administrador principal";
+                $tipo_mensaje = 'danger';
+                $accion       = 'usuarios';
                 break;
+            }
 
-            case 'actualizar_usuario':
-                $id = (int) $_POST['id'];
+            $datos = [
+                'num_socio' => sanitize_input($_POST['num_socio']),
+                'dni'       => sanitize_input($_POST['dni']),
+                'telf'      => sanitize_input($_POST['telf']),
+                'email'     => sanitize_input($_POST['email']),
+                'nombre'    => sanitize_input($_POST['nombre']),
+                'apellido1' => sanitize_input($_POST['apellido1']),
+                'apellido2' => sanitize_input($_POST['apellido2']),
+                'password'  => $_POST['password'],
+                'rol'       => sanitize_input($_POST['rol']),
+            ];
 
-                // Proteger al usuario admin principal
-                $usuario_actual = obtener_usuario($conexionPDO, $id);
-                if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
-                    $mensaje      = "No se puede modificar el usuario administrador principal";
-                    $tipo_mensaje = 'danger';
-                    $accion       = 'usuarios';
-                    break;
-                }
+            if (actualizar_usuario($conexionPDO, $id, $datos)) {
+                $mensaje = "Usuario actualizado exitosamente";
+            } else {
+                $mensaje      = "Error al actualizar el usuario";
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'usuarios';
+            break;
 
-                $datos = [
-                    'num_socio' => sanitize_input($_POST['num_socio']),
-                    'dni'       => sanitize_input($_POST['dni']),
-                    'telf'      => sanitize_input($_POST['telf']),
-                    'email'     => sanitize_input($_POST['email']),
-                    'nombre'    => sanitize_input($_POST['nombre']),
-                    'apellido1' => sanitize_input($_POST['apellido1']),
-                    'apellido2' => sanitize_input($_POST['apellido2']),
-                    'password'  => $_POST['password'],
-                    'rol'       => sanitize_input($_POST['rol']),
-                ];
+        case 'eliminar_usuario':
+            $id = (int) $_POST['id'];
 
-                if (actualizar_usuario($conexionPDO, $id, $datos)) {
-                    $mensaje = "Usuario actualizado exitosamente";
-                } else {
-                    $mensaje      = "Error al actualizar el usuario";
-                    $tipo_mensaje = 'danger';
-                }
-                $accion = 'usuarios';
+            // Proteger al usuario admin principal
+            $usuario_actual = obtener_usuario($conexionPDO, $id);
+            if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
+                $mensaje      = "No se puede eliminar el usuario administrador principal";
+                $tipo_mensaje = 'danger';
+                $accion       = 'usuarios';
                 break;
+            }
 
-            case 'eliminar_usuario':
-                $id = (int) $_POST['id'];
+            if (eliminar_usuario($conexionPDO, $id)) {
+                $mensaje = "Usuario eliminado exitosamente";
+            } else {
+                $mensaje      = "Error al eliminar el usuario";
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'usuarios';
+            break;
 
-                // Proteger al usuario admin principal
-                $usuario_actual = obtener_usuario($conexionPDO, $id);
-                if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
-                    $mensaje      = "No se puede eliminar el usuario administrador principal";
-                    $tipo_mensaje = 'danger';
-                    $accion       = 'usuarios';
-                    break;
-                }
+        case 'aprobar_reserva':
+            $id = (int) $_POST['id'];
+            if (actualizar_estado_reserva($conexionPDO, $id, 'reservada')) {
+                $mensaje = "Reserva aprobada exitosamente";
+            } else {
+                $mensaje      = "Error al aprobar la reserva";
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'reservas';
+            break;
 
-                if (eliminar_usuario($conexionPDO, $id)) {
-                    $mensaje = "Usuario eliminado exitosamente";
-                } else {
-                    $mensaje      = "Error al eliminar el usuario";
-                    $tipo_mensaje = 'danger';
-                }
-                $accion = 'usuarios';
-                break;
+        case 'rechazar_reserva':
+            $id = (int) $_POST['id'];
+            if (cancelar_reserva($conexionPDO, $id)) {
+                $mensaje = "Reserva rechazada exitosamente";
+            } else {
+                $mensaje      = "Error al rechazar la reserva";
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'reservas';
+            break;
 
-            case 'aprobar_reserva':
-                $id = (int) $_POST['id'];
-                if (actualizar_estado_reserva($conexionPDO, $id, 'reservada')) {
-                    $mensaje = "Reserva aprobada exitosamente";
-                } else {
-                    $mensaje      = "Error al aprobar la reserva";
-                    $tipo_mensaje = 'danger';
-                }
-                $accion = 'reservas';
-                break;
+        case 'cancelar_reserva_admin':
+            $id = (int) $_POST['id'];
+            if (cancelar_reserva($conexionPDO, $id)) {
+                $mensaje = "Reserva cancelada exitosamente";
+            } else {
+                $mensaje      = "Error al cancelar la reserva";
+                $tipo_mensaje = 'danger';
+            }
+            $accion = 'reservas';
+            break;
 
-            case 'rechazar_reserva':
-                $id = (int) $_POST['id'];
-                if (cancelar_reserva($conexionPDO, $id)) {
-                    $mensaje = "Reserva rechazada exitosamente";
-                } else {
-                    $mensaje      = "Error al rechazar la reserva";
-                    $tipo_mensaje = 'danger';
-                }
-                $accion = 'reservas';
-                break;
+        case 'editar_reserva_admin':
+            $id_reserva    = (int) $_POST['id_reserva'];
+            $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
+            $fecha_fin     = sanitize_input($_POST['fecha_fin']);
+            $id_habitacion = isset($_POST['id_habitacion']) && $_POST['id_habitacion'] !== '' ? (int) $_POST['id_habitacion'] : null;
+            $numero_camas  = isset($_POST['numero_camas']) && $_POST['numero_camas'] !== '' ? (int) $_POST['numero_camas'] : 0;
+            $actividad     = sanitize_input($_POST['actividad'] ?? '');
 
-            case 'cancelar_reserva_admin':
-                $id = (int) $_POST['id'];
-                if (cancelar_reserva($conexionPDO, $id)) {
-                    $mensaje = "Reserva cancelada exitosamente";
-                } else {
-                    $mensaje      = "Error al cancelar la reserva";
-                    $tipo_mensaje = 'danger';
-                }
-                $accion = 'reservas';
-                break;
-
-            case 'editar_reserva_admin':
-                $id_reserva    = (int) $_POST['id_reserva'];
-                $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
-                $fecha_fin     = sanitize_input($_POST['fecha_fin']);
-                $id_habitacion = isset($_POST['id_habitacion']) && $_POST['id_habitacion'] !== '' ? (int) $_POST['id_habitacion'] : null;
-                $numero_camas  = isset($_POST['numero_camas']) && $_POST['numero_camas'] !== '' ? (int) $_POST['numero_camas'] : 0;
-
-                // Validar fechas
-                if ($fecha_inicio >= $fecha_fin) {
-                    $mensaje      = "La fecha de inicio debe ser anterior a la fecha de fin";
-                    $tipo_mensaje = 'danger';
-                } else {
+            // Validar fechas
+            if ($fecha_inicio >= $fecha_fin) {
+                $_SESSION['mensaje']      = "La fecha de inicio debe ser anterior a la fecha de fin";
+                $_SESSION['tipo_mensaje'] = 'danger';
+            } else {
+                try {
                     if (editar_reserva_admin($conexionPDO, $id_reserva, $fecha_inicio, $fecha_fin, $id_habitacion, $numero_camas)) {
-                        $mensaje = "Reserva actualizada exitosamente";
+                        // Actualizar actividad en observaciones
+                        if (! empty($actividad)) {
+                            $stmt = $conexionPDO->prepare("UPDATE reservas SET observaciones = :actividad WHERE id = :id");
+                            $stmt->execute([':actividad' => $actividad, ':id' => $id_reserva]);
+                        }
+
+                        // Eliminar acompañantes antiguos y agregar nuevos
+                        $stmt = $conexionPDO->prepare("DELETE FROM acompanantes WHERE id_reserva = :id_reserva");
+                        $stmt->execute([':id_reserva' => $id_reserva]);
+
+                        // Procesar acompañantes si existen
+                        if (isset($_POST['acompanantes']) && is_array($_POST['acompanantes'])) {
+                            foreach ($_POST['acompanantes'] as $acomp) {
+                                if (! empty($acomp['dni']) && ! empty($acomp['nombre']) && ! empty($acomp['apellido1'])) {
+                                    $stmt_acomp = $conexionPDO->prepare("
+                                        INSERT INTO acompanantes (id_reserva, num_socio, es_socio, dni, nombre, apellido1, apellido2)
+                                        VALUES (:id_reserva, :num_socio, :es_socio, :dni, :nombre, :apellido1, :apellido2)
+                                    ");
+                                    $stmt_acomp->execute([
+                                        ':id_reserva' => $id_reserva,
+                                        ':num_socio'  => $acomp['num_socio'] ?? null,
+                                        ':es_socio'   => isset($acomp['es_socio']) ? 1 : 0,
+                                        ':dni'        => sanitize_input($acomp['dni']),
+                                        ':nombre'     => sanitize_input($acomp['nombre']),
+                                        ':apellido1'  => sanitize_input($acomp['apellido1']),
+                                        ':apellido2'  => sanitize_input($acomp['apellido2'] ?? ''),
+                                    ]);
+                                }
+                            }
+                        }
+
+                        $_SESSION['mensaje']      = "Reserva actualizada exitosamente";
+                        $_SESSION['tipo_mensaje'] = 'success';
                     } else {
-                        $mensaje      = "Error al actualizar la reserva. Verifica que haya camas disponibles.";
+                        $_SESSION['mensaje']      = "Error al actualizar la reserva. Verifica que haya camas disponibles.";
+                        $_SESSION['tipo_mensaje'] = 'danger';
+                    }
+                } catch (Exception $e) {
+                    $_SESSION['mensaje']      = "Error al actualizar la reserva: " . $e->getMessage();
+                    $_SESSION['tipo_mensaje'] = 'danger';
+                }
+            }
+            header("Location: viewAdmin.php?accion=reservas&tab=aprobadas");
+            exit;
+            break;
+
+        case 'crear_reserva_especial':
+            $datos = [
+                'motivo'        => sanitize_input($_POST['motivo']),
+                'fecha_inicio'  => sanitize_input($_POST['fecha_inicio']),
+                'fecha_fin'     => sanitize_input($_POST['fecha_fin']),
+                'id_habitacion' => (int) $_POST['id_habitacion'],
+                'numero_camas'  => (int) $_POST['numero_camas'],
+            ];
+
+            // Validar fechas
+            if ($datos['fecha_inicio'] >= $datos['fecha_fin']) {
+                $mensaje      = "La fecha de inicio debe ser anterior a la fecha de fin";
+                $tipo_mensaje = 'danger';
+            } elseif ($datos['numero_camas'] < 1) {
+                $mensaje      = "Debe seleccionar al menos 1 cama";
+                $tipo_mensaje = 'danger';
+            } else {
+                // Si id_habitacion es 0, es "Todo el Refugio"
+                if ($datos['id_habitacion'] === 0) {
+                    $resultado = crear_reserva_todo_refugio($conexionPDO, $datos);
+                    if ($resultado) {
+                        $mensaje = "Reserva especial creada para TODO EL REFUGIO: " . htmlspecialchars($datos['motivo']);
+                    } else {
+                        $mensaje      = "Error al crear la reserva para todo el refugio. Verifica que haya camas disponibles.";
+                        $tipo_mensaje = 'danger';
+                    }
+                } else {
+                    // Crear reserva especial para habitación individual
+                    if (crear_reserva_especial_admin($conexionPDO, $datos)) {
+                        $mensaje = "Reserva especial creada exitosamente: " . htmlspecialchars($datos['motivo']);
+                    } else {
+                        $mensaje      = "Error al crear la reserva especial. Verifica que haya camas disponibles.";
                         $tipo_mensaje = 'danger';
                     }
                 }
-                $accion = 'reservas';
-                break;
+            }
+            $accion = 'reservas';
+            break;
 
-            case 'crear_reserva_especial':
-                $datos = [
-                    'motivo'        => sanitize_input($_POST['motivo']),
-                    'fecha_inicio'  => sanitize_input($_POST['fecha_inicio']),
-                    'fecha_fin'     => sanitize_input($_POST['fecha_fin']),
-                    'id_habitacion' => (int) $_POST['id_habitacion'],
-                    'numero_camas'  => (int) $_POST['numero_camas'],
-                ];
+        case 'crear_reserva_socio':
+            try {
+                $id_usuario    = (int) $_POST['id_usuario'];
+                $id_habitacion = (int) $_POST['id_habitacion'];
+                $numero_camas  = (int) $_POST['numero_camas'];
+                $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
+                $fecha_fin     = sanitize_input($_POST['fecha_fin']);
 
                 // Validar fechas
-                if ($datos['fecha_inicio'] >= $datos['fecha_fin']) {
-                    $mensaje      = "La fecha de inicio debe ser anterior a la fecha de fin";
-                    $tipo_mensaje = 'danger';
-                } elseif ($datos['numero_camas'] < 1) {
-                    $mensaje      = "Debe seleccionar al menos 1 cama";
-                    $tipo_mensaje = 'danger';
+                if ($fecha_inicio >= $fecha_fin) {
+                    throw new Exception("La fecha de inicio debe ser anterior a la fecha de fin");
+                }
+
+                // Validar número de camas
+                if ($numero_camas < 1) {
+                    throw new Exception("Debe seleccionar al menos 1 cama");
+                }
+
+                // Crear reserva para el socio (aprobada automáticamente)
+                $datos_reserva = [
+                    'id_usuario'    => $id_usuario,
+                    'id_habitacion' => $id_habitacion,
+                    'numero_camas'  => $numero_camas,
+                    'fecha_inicio'  => $fecha_inicio,
+                    'fecha_fin'     => $fecha_fin,
+                    'actividad'     => sanitize_input($_POST['actividad']),
+                ];
+
+                $id_reserva = crear_reserva_para_socio($conexionPDO, $datos_reserva);
+
+                if ($id_reserva) {
+                    // Procesar acompañantes si existen
+                    if (isset($_POST['acompanantes']) && is_array($_POST['acompanantes'])) {
+                        foreach ($_POST['acompanantes'] as $acomp) {
+                            if (! empty($acomp['dni']) && ! empty($acomp['nombre']) && ! empty($acomp['apellido1'])) {
+                                $stmt_acomp = $conexionPDO->prepare("
+                                    INSERT INTO acompanantes (id_reserva, num_socio, es_socio, dni, nombre, apellido1, apellido2)
+                                    VALUES (:id_reserva, :num_socio, :es_socio, :dni, :nombre, :apellido1, :apellido2)
+                                ");
+                                $stmt_acomp->execute([
+                                    ':id_reserva' => $id_reserva,
+                                    ':num_socio'  => $acomp['num_socio'] ?? null,
+                                    ':es_socio'   => isset($acomp['es_socio']) ? 1 : 0,
+                                    ':dni'        => sanitize_input($acomp['dni']),
+                                    ':nombre'     => sanitize_input($acomp['nombre']),
+                                    ':apellido1'  => sanitize_input($acomp['apellido1']),
+                                    ':apellido2'  => sanitize_input($acomp['apellido2'] ?? ''),
+                                ]);
+                            }
+                        }
+                    }
+
+                    // Obtener nombre del socio
+                    $stmt = $conexionPDO->prepare("SELECT nombre, apellido1 FROM usuarios WHERE id = :id");
+                    $stmt->bindParam(':id', $id_usuario, PDO::PARAM_INT);
+                    $stmt->execute();
+                    $socio = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                    $_SESSION['mensaje']      = "Reserva creada y aprobada automáticamente para {$socio['nombre']} {$socio['apellido1']}";
+                    $_SESSION['tipo_mensaje'] = 'success';
+
+                    // Redirección para prevenir reenvío del formulario
+                    header("Location: viewAdmin.php?accion=reservas&tab=aprobadas");
+                    exit;
                 } else {
-                    // Si id_habitacion es 0, es "Todo el Refugio"
-                    if ($datos['id_habitacion'] === 0) {
-                        $resultado = crear_reserva_todo_refugio($conexionPDO, $datos);
-                        if ($resultado) {
-                            $mensaje = "Reserva especial creada para TODO EL REFUGIO: " . htmlspecialchars($datos['motivo']);
-                        } else {
-                            $mensaje      = "Error al crear la reserva para todo el refugio. Verifica que haya camas disponibles.";
-                            $tipo_mensaje = 'danger';
-                        }
-                    } else {
-                        // Crear reserva especial para habitación individual
-                        if (crear_reserva_especial_admin($conexionPDO, $datos)) {
-                            $mensaje = "Reserva especial creada exitosamente: " . htmlspecialchars($datos['motivo']);
-                        } else {
-                            $mensaje      = "Error al crear la reserva especial. Verifica que haya camas disponibles.";
-                            $tipo_mensaje = 'danger';
-                        }
-                    }
+                    throw new Exception("No hay suficientes camas disponibles");
                 }
-                $accion = 'reservas';
-                break;
-
-            case 'crear_reserva_socio':
-                try {
-                    $id_usuario    = (int) $_POST['id_usuario'];
-                    $id_habitacion = (int) $_POST['id_habitacion'];
-                    $numero_camas  = (int) $_POST['numero_camas'];
-                    $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
-                    $fecha_fin     = sanitize_input($_POST['fecha_fin']);
-
-                    // Validar fechas
-                    if ($fecha_inicio >= $fecha_fin) {
-                        throw new Exception("La fecha de inicio debe ser anterior a la fecha de fin");
-                    }
-
-                    // Validar número de camas
-                    if ($numero_camas < 1) {
-                        throw new Exception("Debe seleccionar al menos 1 cama");
-                    }
-
-                    // Crear reserva para el socio (aprobada automáticamente)
-                    $datos_reserva = [
-                        'id_usuario'    => $id_usuario,
-                        'id_habitacion' => $id_habitacion,
-                        'numero_camas'  => $numero_camas,
-                        'fecha_inicio'  => $fecha_inicio,
-                        'fecha_fin'     => $fecha_fin,
-                    ];
-
-                    $id_reserva = crear_reserva_para_socio($conexionPDO, $datos_reserva);
-
-                    if ($id_reserva) {
-                        // Obtener nombre del socio
-                        $stmt = $conexionPDO->prepare("SELECT nombre, apellido1 FROM usuarios WHERE id = :id");
-                        $stmt->bindParam(':id', $id_usuario, PDO::PARAM_INT);
-                        $stmt->execute();
-                        $socio = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                        $mensaje = "Reserva creada y aprobada automáticamente para {$socio['nombre']} {$socio['apellido1']}";
-                    } else {
-                        throw new Exception("No hay suficientes camas disponibles");
-                    }
-                } catch (Exception $e) {
-                    $mensaje      = "Error al crear reserva: " . $e->getMessage();
-                    $tipo_mensaje = 'danger';
-                }
-                $accion = 'reservas';
-                break;
-
-            case 'export_csv':
-                $tipo_reserva = $_POST['tipo_reserva'] ?? 'pendiente';
-                $filename     = "reservas_{$tipo_reserva}_" . date('Y-m-d') . ".csv";
-
-                header('Content-Type: text/csv');
-                header('Content-Disposition: attachment; filename="' . $filename . '"');
-
-                $output = fopen('php://output', 'w');
-
-                // Encabezados CSV
-                fputcsv($output, ['ID', 'Usuario', 'Email', 'Habitacion', 'Camas', 'Entrada', 'Salida', 'Estado', 'Fecha Creacion']);
-
-                // Obtener datos (sin paginación para exportar todo)
-                $filtros = ['estado' => $tipo_reserva];
-
-                // Aplicar filtros de búsqueda si existen
-                if (! empty($_POST['search'])) {
-                    $filtros['search'] = $_POST['search'];
-                }
-
-                // Aplicar ordenamiento si existe
-                if (! empty($_POST['sort'])) {
-                    $filtros['order_by']  = $_POST['sort'];
-                    $filtros['order_dir'] = $_POST['order_dir'] ?? 'DESC';
-                }
-
-                $reservas = listar_reservas($conexionPDO, $filtros);
-
-                foreach ($reservas as $row) {
-                    fputcsv($output, [
-                        $row['id'],
-                        $row['nombre'] . ' ' . $row['apellido1'],
-                        $row['email'],
-                        $row['habitacion_numero'] ?? 'Todo el Refugio',
-                        $row['numero_camas'],
-                        $row['fecha_inicio'],
-                        $row['fecha_fin'],
-                        $row['estado'],
-                        $row['fecha_creacion'],
-                    ]);
-                }
-
-                fclose($output);
+            } catch (Exception $e) {
+                $_SESSION['mensaje']      = "Error al crear reserva: " . $e->getMessage();
+                $_SESSION['tipo_mensaje'] = 'danger';
+                header("Location: viewAdmin.php?accion=reservas");
                 exit;
-                break;
+            }
+            break;
 
-            case 'export_usuarios_csv':
-                $search = $_GET['search'] ?? '';
-                $sort   = $_GET['sort'] ?? 'num_socio';
-                $dir    = $_GET['dir'] ?? 'ASC';
+        case 'export_csv':
+            $tipo_reserva = $_POST['tipo_reserva'] ?? 'pendiente';
+            $filename     = "reservas_{$tipo_reserva}_" . date('Y-m-d') . ".csv";
 
-                export_usuarios_csv($conexionPDO, [
-                    'search'    => $search,
-                    'order_by'  => $sort,
-                    'order_dir' => $dir,
+            header('Content-Type: text/csv');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+            $output = fopen('php://output', 'w');
+
+            // Encabezados CSV
+            fputcsv($output, ['ID', 'Usuario', 'Email', 'Habitacion', 'Camas', 'Entrada', 'Salida', 'Estado', 'Fecha Creacion']);
+
+            // Obtener datos (sin paginación para exportar todo)
+            $filtros = ['estado' => $tipo_reserva];
+
+            // Aplicar filtros de búsqueda si existen
+            if (! empty($_POST['search'])) {
+                $filtros['search'] = $_POST['search'];
+            }
+
+            // Aplicar ordenamiento si existe
+            if (! empty($_POST['sort'])) {
+                $filtros['order_by']  = $_POST['sort'];
+                $filtros['order_dir'] = $_POST['order_dir'] ?? 'DESC';
+            }
+
+            $reservas = listar_reservas($conexionPDO, $filtros);
+
+            foreach ($reservas as $row) {
+                fputcsv($output, [
+                    $row['id'],
+                    $row['nombre'] . ' ' . $row['apellido1'],
+                    $row['email'],
+                    $row['habitacion_numero'] ?? 'Todo el Refugio',
+                    $row['numero_camas'],
+                    $row['fecha_inicio'],
+                    $row['fecha_fin'],
+                    $row['estado'],
+                    $row['fecha_creacion'],
                 ]);
-                break;
-        }
+            }
+
+            fclose($output);
+            exit;
+            break;
+
+        case 'export_usuarios_csv':
+            $search = $_GET['search'] ?? '';
+            $sort   = $_GET['sort'] ?? 'num_socio';
+            $dir    = $_GET['dir'] ?? 'ASC';
+
+            export_usuarios_csv($conexionPDO, [
+                'search'    => $search,
+                'order_by'  => $sort,
+                'order_dir' => $dir,
+            ]);
+            break;
+    }
     }
 
     // Obtener datos según la acción
@@ -308,117 +378,117 @@
     $usuario_editar      = null;
 
     if ($accion === 'usuarios' || $accion === 'editar_usuario') {
-        // Parámetros de paginación y filtros para usuarios
-        $page_usuarios      = isset($_GET['page']) ? (int) $_GET['page'] : 1;
-        $limit_usuarios     = 10;
-        $offset_usuarios    = ($page_usuarios - 1) * $limit_usuarios;
-        $search_usuarios    = $_GET['search'] ?? '';
-        $sort_usuarios      = $_GET['sort'] ?? 'num_socio';
-        $order_dir_usuarios = $_GET['dir'] ?? 'ASC';
+    // Parámetros de paginación y filtros para usuarios
+    $page_usuarios      = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+    $limit_usuarios     = 10;
+    $offset_usuarios    = ($page_usuarios - 1) * $limit_usuarios;
+    $search_usuarios    = $_GET['search'] ?? '';
+    $sort_usuarios      = $_GET['sort'] ?? 'num_socio';
+    $order_dir_usuarios = $_GET['dir'] ?? 'ASC';
 
-        $filtros_usuarios = [
-            'page'      => $page_usuarios,
-            'limit'     => $limit_usuarios,
-            'search'    => $search_usuarios,
-            'order_by'  => $sort_usuarios,
-            'order_dir' => $order_dir_usuarios,
-        ];
+    $filtros_usuarios = [
+        'page'      => $page_usuarios,
+        'limit'     => $limit_usuarios,
+        'search'    => $search_usuarios,
+        'order_by'  => $sort_usuarios,
+        'order_dir' => $order_dir_usuarios,
+    ];
 
-        $usuarios         = listar_usuarios_paginado($conexionPDO, $filtros_usuarios);
-        $total_usuarios   = contar_usuarios($conexionPDO, ['search' => $search_usuarios]);
-        $paginas_usuarios = ceil($total_usuarios / $limit_usuarios);
+    $usuarios         = listar_usuarios_paginado($conexionPDO, $filtros_usuarios);
+    $total_usuarios   = contar_usuarios($conexionPDO, ['search' => $search_usuarios]);
+    $paginas_usuarios = ceil($total_usuarios / $limit_usuarios);
 
-        if ($accion === 'editar_usuario' && isset($_GET['id'])) {
-            $usuario_editar = obtener_usuario($conexionPDO, (int) $_GET['id']);
-        }
+    if ($accion === 'editar_usuario' && isset($_GET['id'])) {
+        $usuario_editar = obtener_usuario($conexionPDO, (int) $_GET['id']);
+    }
     } elseif ($accion === 'reservas') {
-        // Parámetros de paginación y filtros
-        $page      = isset($_GET['page']) ? (int) $_GET['page'] : 1;
-        $limit     = 5;
-        $offset    = ($page - 1) * $limit;
-        $search    = $_GET['search'] ?? '';
-        $sort      = $_GET['sort'] ?? 'fecha_creacion';
-        $order_dir = $_GET['dir'] ?? 'DESC';
-        $tab       = $_GET['tab'] ?? 'pendientes'; // Para saber qué pestaña está activa
+    // Parámetros de paginación y filtros
+    $page      = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+    $limit     = 5;
+    $offset    = ($page - 1) * $limit;
+    $search    = $_GET['search'] ?? '';
+    $sort      = $_GET['sort'] ?? 'fecha_inicio';
+    $order_dir = $_GET['dir'] ?? 'ASC';
+    $tab       = $_GET['tab'] ?? 'pendientes'; // Para saber qué pestaña está activa
 
-        // Filtros comunes
-        $filtros_base = [
-            'limit'     => $limit,
-            'offset'    => $offset,
-            'search'    => $search,
-            'order_by'  => $sort,
-            'order_dir' => $order_dir,
-        ];
+    // Filtros comunes
+    $filtros_base = [
+        'limit'     => $limit,
+        'offset'    => $offset,
+        'search'    => $search,
+        'order_by'  => $sort,
+        'order_dir' => $order_dir,
+    ];
 
-        // Reservas Pendientes
-        $filtros_pendientes = array_merge($filtros_base, ['estado' => 'pendiente']);
-        if ($tab !== 'pendientes') {
-                                                  // Si no es la pestaña activa, solo necesitamos el conteo o las primeras 5
-                                                  // Pero para simplificar, cargamos según la paginación si es la activa, o reset si no
-            unset($filtros_pendientes['offset']); // Reset offset for non-active tabs if needed, but keeping simple for now
-        }
+    // Reservas Pendientes
+    $filtros_pendientes = array_merge($filtros_base, ['estado' => 'pendiente']);
+    if ($tab !== 'pendientes') {
+                                              // Si no es la pestaña activa, solo necesitamos el conteo o las primeras 5
+                                              // Pero para simplificar, cargamos según la paginación si es la activa, o reset si no
+        unset($filtros_pendientes['offset']); // Reset offset for non-active tabs if needed, but keeping simple for now
+    }
 
-        // Ajustar offset solo para la pestaña activa
-        $filtros_pendientes['offset'] = ($tab === 'pendientes') ? $offset : 0;
+    // Ajustar offset solo para la pestaña activa
+    $filtros_pendientes['offset'] = ($tab === 'pendientes') ? $offset : 0;
 
-        $reservas_pendientes = listar_reservas($conexionPDO, $filtros_pendientes);
-        $total_pendientes    = contar_reservas($conexionPDO, array_merge($filtros_pendientes, ['limit' => null, 'offset' => null]));
-        $paginas_pendientes  = ceil($total_pendientes / $limit);
+    $reservas_pendientes = listar_reservas($conexionPDO, $filtros_pendientes);
+    $total_pendientes    = contar_reservas($conexionPDO, array_merge($filtros_pendientes, ['limit' => null, 'offset' => null]));
+    $paginas_pendientes  = ceil($total_pendientes / $limit);
 
-        // Reservas Aprobadas
-        $filtros_aprobadas           = array_merge($filtros_base, ['estado' => 'reservada']);
-        $filtros_aprobadas['offset'] = ($tab === 'aprobadas') ? $offset : 0;
+    // Reservas Aprobadas
+    $filtros_aprobadas           = array_merge($filtros_base, ['estado' => 'reservada']);
+    $filtros_aprobadas['offset'] = ($tab === 'aprobadas') ? $offset : 0;
 
-        $reservas_aprobadas = listar_reservas($conexionPDO, $filtros_aprobadas);
-        $total_aprobadas    = contar_reservas($conexionPDO, array_merge($filtros_aprobadas, ['limit' => null, 'offset' => null]));
-        $paginas_aprobadas  = ceil($total_aprobadas / $limit);
+    $reservas_aprobadas = listar_reservas($conexionPDO, $filtros_aprobadas);
+    $total_aprobadas    = contar_reservas($conexionPDO, array_merge($filtros_aprobadas, ['limit' => null, 'offset' => null]));
+    $paginas_aprobadas  = ceil($total_aprobadas / $limit);
 
-        // Reservas Canceladas
-        $filtros_canceladas           = array_merge($filtros_base, ['estado' => 'cancelada']);
-        $filtros_canceladas['offset'] = ($tab === 'canceladas') ? $offset : 0;
+    // Reservas Canceladas
+    $filtros_canceladas           = array_merge($filtros_base, ['estado' => 'cancelada']);
+    $filtros_canceladas['offset'] = ($tab === 'canceladas') ? $offset : 0;
 
-        $reservas_canceladas = listar_reservas($conexionPDO, $filtros_canceladas);
-        $total_canceladas    = contar_reservas($conexionPDO, array_merge($filtros_canceladas, ['limit' => null, 'offset' => null]));
-        $paginas_canceladas  = ceil($total_canceladas / $limit);
+    $reservas_canceladas = listar_reservas($conexionPDO, $filtros_canceladas);
+    $total_canceladas    = contar_reservas($conexionPDO, array_merge($filtros_canceladas, ['limit' => null, 'offset' => null]));
+    $paginas_canceladas  = ceil($total_canceladas / $limit);
 
     } elseif ($accion === 'dashboard') {
-        $reservas_pendientes = listar_reservas($conexionPDO, ['estado' => 'pendiente']);
-        $habitaciones        = listar_habitaciones($conexionPDO);
+    $reservas_pendientes = listar_reservas($conexionPDO, ['estado' => 'pendiente']);
+    $habitaciones        = listar_habitaciones($conexionPDO);
 
-        // Obtener mes y año actual o seleccionado para el calendario
-        $mes_actual  = isset($_GET['mes']) ? (int) $_GET['mes'] : (int) date('n');
-        $anio_actual = isset($_GET['anio']) ? (int) $_GET['anio'] : (int) date('Y');
+    // Obtener mes y año actual o seleccionado para el calendario
+    $mes_actual  = isset($_GET['mes']) ? (int) $_GET['mes'] : (int) date('n');
+    $anio_actual = isset($_GET['anio']) ? (int) $_GET['anio'] : (int) date('Y');
 
-        // Calcular mes anterior y siguiente
-        $mes_anterior  = $mes_actual - 1;
-        $anio_anterior = $anio_actual;
-        if ($mes_anterior < 1) {
-            $mes_anterior = 12;
-            $anio_anterior--;
-        }
+    // Calcular mes anterior y siguiente
+    $mes_anterior  = $mes_actual - 1;
+    $anio_anterior = $anio_actual;
+    if ($mes_anterior < 1) {
+        $mes_anterior = 12;
+        $anio_anterior--;
+    }
 
-        $mes_siguiente  = $mes_actual + 1;
-        $anio_siguiente = $anio_actual;
-        if ($mes_siguiente > 12) {
-            $mes_siguiente = 1;
-            $anio_siguiente++;
-        }
+    $mes_siguiente  = $mes_actual + 1;
+    $anio_siguiente = $anio_actual;
+    if ($mes_siguiente > 12) {
+        $mes_siguiente = 1;
+        $anio_siguiente++;
+    }
 
-        // Obtener días del mes
-        $primer_dia        = mktime(0, 0, 0, $mes_actual, 1, $anio_actual);
-        $dias_en_mes       = date('t', $primer_dia);
-        $dia_semana_inicio = date('N', $primer_dia); // 1 = Lunes, 7 = Domingo
+    // Obtener días del mes
+    $primer_dia        = mktime(0, 0, 0, $mes_actual, 1, $anio_actual);
+    $dias_en_mes       = date('t', $primer_dia);
+    $dia_semana_inicio = date('N', $primer_dia); // 1 = Lunes, 7 = Domingo
     }
 
     // Función para obtener el mes en español
     function mes_espanol($mes)
     {
-        $meses = [
-            1 => 'Enero', 2       => 'Febrero', 3  => 'Marzo', 4      => 'Abril',
-            5 => 'Mayo', 6        => 'Junio', 7    => 'Julio', 8      => 'Agosto',
-            9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
-        ];
-        return $meses[(int) $mes];
+    $meses = [
+        1 => 'Enero', 2       => 'Febrero', 3  => 'Marzo', 4      => 'Abril',
+        5 => 'Mayo', 6        => 'Junio', 7    => 'Julio', 8      => 'Agosto',
+        9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+    ];
+    return $meses[(int) $mes];
     }
 ?>
 
@@ -463,10 +533,21 @@
         .card-stat.warning {
             border-color: #f59e0b;
         }
+        .card-stat.danger {
+            border-color: #ef4444;
+        }
         .badge-status {
             padding: 6px 12px;
             border-radius: 20px;
             font-weight: 500;
+        }
+        /* Estilos para encabezados ordenables */
+        th a {
+            cursor: pointer;
+            user-select: none;
+        }
+        th a:hover {
+            color: #3b82f6 !important;
         }
         /* Estilos del calendario */
         .calendario {
@@ -618,6 +699,7 @@
                     <!-- Dashboard -->
                     <h2 class="mb-4">Dashboard</h2>
 
+                    <!-- Primera fila de estadísticas -->
                     <div class="row mb-4">
                         <div class="col-md-4">
                             <div class="card card-stat primary shadow-sm">
@@ -633,17 +715,19 @@
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card card-stat warning shadow-sm">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <h6 class="text-muted">Reservas Pendientes</h6>
-                                            <h2><?php echo count($reservas_pendientes) ?></h2>
+                            <a href="?accion=reservas&tab=pendientes" class="text-decoration-none">
+                                <div class="card card-stat warning shadow-sm">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="text-muted">Reservas Pendientes</h6>
+                                                <h2><?php echo count($reservas_pendientes) ?></h2>
+                                            </div>
+                                            <i class="bi bi-hourglass-split fs-1 text-warning"></i>
                                         </div>
-                                        <i class="bi bi-hourglass-split fs-1 text-warning"></i>
                                     </div>
                                 </div>
-                            </div>
+                            </a>
                         </div>
                         <div class="col-md-4">
                             <div class="card card-stat success shadow-sm">
@@ -657,6 +741,46 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Segunda fila de estadísticas - Reservas -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <a href="?accion=reservas&tab=aprobadas" class="text-decoration-none">
+                                <div class="card card-stat success shadow-sm">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="text-muted">Reservas Aprobadas</h6>
+                                                <h2><?php
+                                                        $reservas_aprobadas_count = contar_reservas($conexionPDO, ['estado' => 'reservada']);
+                                                    echo $reservas_aprobadas_count;
+                                                    ?></h2>
+                                            </div>
+                                            <i class="bi bi-check-circle-fill fs-1 text-success"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="?accion=reservas&tab=canceladas" class="text-decoration-none">
+                                <div class="card card-stat danger shadow-sm">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="text-muted">Reservas Canceladas</h6>
+                                                <h2><?php
+                                                        $reservas_canceladas_count = contar_reservas($conexionPDO, ['estado' => 'cancelada']);
+                                                    echo $reservas_canceladas_count;
+                                                    ?></h2>
+                                            </div>
+                                            <i class="bi bi-x-circle-fill fs-1 text-danger"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
                         </div>
                     </div>
 
@@ -1138,11 +1262,12 @@
                                     <form class="d-flex gap-2" method="get">
                                         <input type="hidden" name="accion" value="reservas">
                                         <input type="hidden" name="tab" value="pendientes">
+                                        <input type="hidden" name="dir" value="ASC">
                                         <input type="text" name="search" class="form-control form-control-sm" placeholder="Buscar..." value="<?php echo htmlspecialchars($search) ?>">
                                         <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
-                                            <option value="fecha_creacion"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Más recientes</option>
-                                            <option value="fecha_inicio"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
-                                            <option value="nombre"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
+                                            <option value="fecha_inicio" <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
+                                            <option value="fecha_creacion" <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Fecha Solicitud</option>
+                                            <option value="nombre" <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
                                         </select>
                                         <button type="submit" class="btn btn-light btn-sm"><i class="bi bi-search"></i></button>
                                     </form>
@@ -1161,12 +1286,40 @@
                                         <table class="table table-hover">
                                             <thead>
                                                 <tr>
-                                                    <th>ID</th>
-                                                    <th>Usuario</th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=pendientes&sort=id&dir=<?php echo($sort === 'id' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            ID <?php if ($sort === 'id') {
+                                                                       echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                   }
+                                                               ?>
+                                                        </a>
+                                                    </th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=pendientes&sort=nombre&dir=<?php echo($sort === 'nombre' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Usuario <?php if ($sort === 'nombre') {
+                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                        }
+                                                                    ?>
+                                                        </a>
+                                                    </th>
                                                     <th>Habitación</th>
                                                     <th>Camas</th>
-                                                    <th>Entrada</th>
-                                                    <th>Salida</th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=pendientes&sort=fecha_inicio&dir=<?php echo($sort === 'fecha_inicio' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Entrada <?php if ($sort === 'fecha_inicio') {
+                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                        }
+                                                                    ?>
+                                                        </a>
+                                                    </th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=pendientes&sort=fecha_fin&dir=<?php echo($sort === 'fecha_fin' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Salida <?php if ($sort === 'fecha_fin') {
+                                                                           echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                       }
+                                                                   ?>
+                                                        </a>
+                                                    </th>
                                                     <th>Acciones</th>
                                                 </tr>
                                             </thead>
@@ -1205,7 +1358,7 @@
                                             <ul class="pagination justify-content-center">
                                                 <?php for ($i = 1; $i <= $paginas_pendientes; $i++): ?>
                                                     <li class="page-item<?php echo $page === $i ? 'active' : '' ?>">
-                                                        <a class="page-link" href="?accion=reservas&tab=pendientes&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>"><?php echo $i ?></a>
+                                                        <a class="page-link" href="?accion=reservas&tab=pendientes&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>&dir=ASC"><?php echo $i ?></a>
                                                     </li>
                                                 <?php endfor; ?>
                                             </ul>
@@ -1226,11 +1379,12 @@
                                     <form class="d-flex gap-2" method="get">
                                         <input type="hidden" name="accion" value="reservas">
                                         <input type="hidden" name="tab" value="aprobadas">
+                                        <input type="hidden" name="dir" value="ASC">
                                         <input type="text" name="search" class="form-control form-control-sm" placeholder="Buscar..." value="<?php echo htmlspecialchars($search) ?>">
                                         <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
-                                            <option value="fecha_creacion"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Más recientes</option>
-                                            <option value="fecha_inicio"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
-                                            <option value="nombre"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
+                                            <option value="fecha_inicio" <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
+                                            <option value="fecha_creacion" <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Fecha Solicitud</option>
+                                            <option value="nombre" <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
                                         </select>
                                         <button type="submit" class="btn btn-light btn-sm"><i class="bi bi-search"></i></button>
                                     </form>
@@ -1249,12 +1403,41 @@
                                         <table class="table table-hover">
                                             <thead>
                                                 <tr>
-                                                    <th>ID</th>
-                                                    <th>Usuario</th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=aprobadas&sort=id&dir=<?php echo($sort === 'id' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            ID <?php if ($sort === 'id') {
+                                                                       echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                   }
+                                                               ?>
+                                                        </a>
+                                                    </th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=aprobadas&sort=nombre&dir=<?php echo($sort === 'nombre' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Usuario <?php if ($sort === 'nombre') {
+                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                        }
+                                                                    ?>
+                                                        </a>
+                                                    </th>
                                                     <th>Habitación</th>
                                                     <th>Camas</th>
-                                                    <th>Entrada</th>
-                                                    <th>Salida</th>
+                                                    <th>Actividad</th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=aprobadas&sort=fecha_inicio&dir=<?php echo($sort === 'fecha_inicio' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Entrada <?php if ($sort === 'fecha_inicio') {
+                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                        }
+                                                                    ?>
+                                                        </a>
+                                                    </th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=aprobadas&sort=fecha_fin&dir=<?php echo($sort === 'fecha_fin' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Salida <?php if ($sort === 'fecha_fin') {
+                                                                           echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                       }
+                                                                   ?>
+                                                        </a>
+                                                    </th>
                                                     <th>Acciones</th>
                                                 </tr>
                                             </thead>
@@ -1268,6 +1451,7 @@
                                                         </td>
                                                         <td><?php echo $reserva['habitacion_numero'] ?? 'Todo el Refugio' ?></td>
                                                         <td><?php echo $reserva['numero_camas'] ?></td>
+                                                        <td><?php echo htmlspecialchars($reserva['observaciones'] ?? '-') ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                         <td>
@@ -1291,7 +1475,7 @@
                                             <ul class="pagination justify-content-center">
                                                 <?php for ($i = 1; $i <= $paginas_aprobadas; $i++): ?>
                                                     <li class="page-item<?php echo $page === $i ? 'active' : '' ?>">
-                                                        <a class="page-link" href="?accion=reservas&tab=aprobadas&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>"><?php echo $i ?></a>
+                                                        <a class="page-link" href="?accion=reservas&tab=aprobadas&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>&dir=ASC"><?php echo $i ?></a>
                                                     </li>
                                                 <?php endfor; ?>
                                             </ul>
@@ -1312,11 +1496,12 @@
                                     <form class="d-flex gap-2" method="get">
                                         <input type="hidden" name="accion" value="reservas">
                                         <input type="hidden" name="tab" value="canceladas">
+                                        <input type="hidden" name="dir" value="ASC">
                                         <input type="text" name="search" class="form-control form-control-sm" placeholder="Buscar..." value="<?php echo htmlspecialchars($search) ?>">
                                         <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
-                                            <option value="fecha_creacion"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Más recientes</option>
-                                            <option value="fecha_inicio"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
-                                            <option value="nombre"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
+                                            <option value="fecha_inicio" <?php echo $sort === 'fecha_inicio' ? 'selected' : '' ?>>Fecha Entrada</option>
+                                            <option value="fecha_creacion" <?php echo $sort === 'fecha_creacion' ? 'selected' : '' ?>>Fecha Solicitud</option>
+                                            <option value="nombre" <?php echo $sort === 'nombre' ? 'selected' : '' ?>>Nombre</option>
                                         </select>
                                         <button type="submit" class="btn btn-light btn-sm"><i class="bi bi-search"></i></button>
                                     </form>
@@ -1335,12 +1520,40 @@
                                         <table class="table table-hover">
                                             <thead>
                                                 <tr>
-                                                    <th>ID</th>
-                                                    <th>Usuario</th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=canceladas&sort=id&dir=<?php echo($sort === 'id' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            ID <?php if ($sort === 'id') {
+                                                                       echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                   }
+                                                               ?>
+                                                        </a>
+                                                    </th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=canceladas&sort=nombre&dir=<?php echo($sort === 'nombre' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Usuario <?php if ($sort === 'nombre') {
+                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                        }
+                                                                    ?>
+                                                        </a>
+                                                    </th>
                                                     <th>Habitación</th>
                                                     <th>Camas</th>
-                                                    <th>Entrada</th>
-                                                    <th>Salida</th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=canceladas&sort=fecha_inicio&dir=<?php echo($sort === 'fecha_inicio' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Entrada <?php if ($sort === 'fecha_inicio') {
+                                                                            echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                        }
+                                                                    ?>
+                                                        </a>
+                                                    </th>
+                                                    <th>
+                                                        <a href="?accion=reservas&tab=canceladas&sort=fecha_fin&dir=<?php echo($sort === 'fecha_fin' && $order_dir === 'ASC') ? 'DESC' : 'ASC' ?>&search=<?php echo urlencode($search) ?>" class="text-decoration-none text-dark">
+                                                            Salida <?php if ($sort === 'fecha_fin') {
+                                                                           echo($order_dir === 'ASC' ? '▲' : '▼');
+                                                                       }
+                                                                   ?>
+                                                        </a>
+                                                    </th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -1366,7 +1579,7 @@
                                             <ul class="pagination justify-content-center">
                                                 <?php for ($i = 1; $i <= $paginas_canceladas; $i++): ?>
                                                     <li class="page-item<?php echo $page === $i ? 'active' : '' ?>">
-                                                        <a class="page-link" href="?accion=reservas&tab=canceladas&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>"><?php echo $i ?></a>
+                                                        <a class="page-link" href="?accion=reservas&tab=canceladas&page=<?php echo $i ?>&search=<?php echo urlencode($search) ?>&sort=<?php echo urlencode($sort) ?>&dir=ASC"><?php echo $i ?></a>
                                                     </li>
                                                 <?php endfor; ?>
                                             </ul>
@@ -1398,15 +1611,16 @@
 
                         <div class="mb-3">
                             <label class="form-label">Seleccionar Socio *</label>
-                            <select class="form-select" name="id_usuario" required id="selectSocio">
+                            <input type="text" class="form-control mb-2" id="buscarSocio" placeholder="Buscar por nombre, apellidos o teléfono...">
+                            <select class="form-select" name="id_usuario" required id="selectSocio" size="6">
                                 <option value="">Seleccione un socio</option>
                                 <?php
-                                    $stmt = $conexionPDO->prepare("SELECT id, num_socio, nombre, apellido1, apellido2 FROM usuarios WHERE rol = 'user' ORDER BY num_socio");
+                                    $stmt = $conexionPDO->prepare("SELECT id, num_socio, nombre, apellido1, apellido2, telf FROM usuarios WHERE rol = 'user' ORDER BY num_socio");
                                     $stmt->execute();
                                     $socios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 foreach ($socios as $socio): ?>
-                                    <option value="<?php echo $socio['id'] ?>">
-                                        <?php echo $socio['num_socio'] ?> -<?php echo $socio['nombre'] ?> <?php echo $socio['apellido1'] ?> <?php echo $socio['apellido2'] ?>
+                                    <option value="<?php echo $socio['id'] ?>" data-nombre="<?php echo strtolower($socio['nombre'] . ' ' . $socio['apellido1'] . ' ' . $socio['apellido2']) ?>" data-telf="<?php echo $socio['telf'] ?>">
+                                        <?php echo $socio['num_socio'] ?> - <?php echo $socio['nombre'] ?> <?php echo $socio['apellido1'] ?> <?php echo $socio['apellido2'] ?> (<?php echo $socio['telf'] ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -1453,10 +1667,32 @@
                             </div>
                             <small class="text-muted" id="infoCamasSocio">Selecciona una habitación primero</small>
                         </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Actividad a Realizar *</label>
+                            <textarea class="form-control" name="actividad" required rows="3" placeholder="Describe la actividad a realizar durante la estancia..."></textarea>
+                        </div>
+
+                        <!-- Sección de Acompañantes -->
+                        <div id="seccionAcompanantesSocio" style="display: none;">
+                            <hr>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-people-fill"></i> Acompañantes
+                                    <span id="badgeAcompanantesSocio" class="badge bg-info">0/0</span>
+                                </h6>
+                                <button type="button" class="btn btn-sm btn-primary" onclick="agregarAcompananteSocio()" id="btnAgregarAcompananteSocio">
+                                    <i class="bi bi-person-plus-fill"></i> Agregar
+                                </button>
+                            </div>
+                            <div id="containerAcompanantesSocio">
+                                <p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar los datos de los acompañantes.</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-success">
+                        <button type="submit" class="btn btn-success" id="btnSubmitReservaSocio">
                             <i class="bi bi-check-circle"></i> Crear Reserva
                         </button>
                     </div>
@@ -1619,7 +1855,13 @@
             inputCamas.max = maxCamasSocio;
             inputCamas.value = 1;
             infoCamas.textContent = `Máximo ${maxCamasSocio} camas disponibles en esta habitación`;
+
+            // Actualizar sección de acompañantes
+            actualizarSeccionAcompanantesSocio(1);
         });
+
+        let contadorAcompanantesSocio = 0;
+        let acompanantesActualesSocio = 0;
 
         function cambiarCamasSocio(cambio) {
             const input = document.getElementById('numeroCamasSocio');
@@ -1639,7 +1881,155 @@
             }
 
             input.value = nuevoValor;
+            actualizarSeccionAcompanantesSocio(nuevoValor);
         }
+
+        function actualizarSeccionAcompanantesSocio(numeroCamas) {
+            const seccion = document.getElementById('seccionAcompanantesSocio');
+            const container = document.getElementById('containerAcompanantesSocio');
+            const badge = document.getElementById('badgeAcompanantesSocio');
+            const btnAgregar = document.getElementById('btnAgregarAcompananteSocio');
+
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (numeroCamas === 1) {
+                // Ocultar sección
+                seccion.style.display = 'none';
+                container.innerHTML = '';
+                acompanantesActualesSocio = 0;
+            } else {
+                // Mostrar sección
+                seccion.style.display = 'block';
+                badge.textContent = `${acompanantesActualesSocio}/${acompanantesRequeridos}`;
+
+                // Limpiar y reiniciar
+                container.innerHTML = '<p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar ' + acompanantesRequeridos + ' acompañante(s).</p>';
+                acompanantesActualesSocio = 0;
+                btnAgregar.disabled = false;
+            }
+        }
+
+        function agregarAcompananteSocio() {
+            const numeroCamas = parseInt(document.getElementById('numeroCamasSocio').value) || 0;
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (acompanantesActualesSocio >= acompanantesRequeridos) {
+                alert(`Solo puedes agregar ${acompanantesRequeridos} acompañante(s) para ${numeroCamas} cama(s).`);
+                return;
+            }
+
+            contadorAcompanantesSocio++;
+            acompanantesActualesSocio++;
+
+            const container = document.getElementById('containerAcompanantesSocio');
+            const badge = document.getElementById('badgeAcompanantesSocio');
+            const btnAgregar = document.getElementById('btnAgregarAcompananteSocio');
+
+            badge.textContent = `${acompanantesActualesSocio}/${acompanantesRequeridos}`;
+
+            if (acompanantesActualesSocio >= acompanantesRequeridos) {
+                btnAgregar.disabled = true;
+            }
+
+            const html = `
+                <div class="border rounded p-3 mb-3" id="acompanante-socio-${contadorAcompanantesSocio}">
+                    <div class="d-flex justify-content-between mb-2">
+                        <strong><i class="bi bi-person"></i> Acompañante #${acompanantesActualesSocio}</strong>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarAcompananteSocio(${contadorAcompanantesSocio})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label">DNI *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesSocio}][dni]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nombre *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesSocio}][nombre]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Apellido 1 *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesSocio}][apellido1]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Apellido 2</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesSocio}][apellido2]" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">¿Es socio?</label>
+                            <select name="acompanantes[${contadorAcompanantesSocio}][es_socio]" class="form-select form-select-sm" onchange="toggleNumSocioAdmin(${contadorAcompanantesSocio})">
+                                <option value="no">No</option>
+                                <option value="si">Sí</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="numSocioDiv-${contadorAcompanantesSocio}" style="display:none">
+                            <label class="form-label">Nº Socio</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesSocio}][num_socio]" class="form-control form-control-sm">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.insertAdjacentHTML('beforeend', html);
+        }
+
+        function eliminarAcompananteSocio(id) {
+            document.getElementById(`acompanante-socio-${id}`).remove();
+            acompanantesActualesSocio--;
+
+            const numeroCamas = parseInt(document.getElementById('numeroCamasSocio').value) || 0;
+            const acompanantesRequeridos = numeroCamas - 1;
+            const badge = document.getElementById('badgeAcompanantesSocio');
+            const btnAgregar = document.getElementById('btnAgregarAcompananteSocio');
+
+            badge.textContent = `${acompanantesActualesSocio}/${acompanantesRequeridos}`;
+
+            if (acompanantesActualesSocio < acompanantesRequeridos) {
+                btnAgregar.disabled = false;
+            }
+        }
+
+        function toggleNumSocioAdmin(id) {
+            const select = document.querySelector(`select[name="acompanantes[${id}][es_socio]"]`);
+            const div = document.getElementById(`numSocioDiv-${id}`);
+            div.style.display = select.value === 'si' ? 'block' : 'none';
+        }
+
+        // Funcionalidad de búsqueda de socios
+        document.getElementById('buscarSocio').addEventListener('input', function() {
+            const searchText = this.value.toLowerCase();
+            const select = document.getElementById('selectSocio');
+            const options = select.querySelectorAll('option');
+
+            options.forEach(option => {
+                if (option.value === '') {
+                    option.style.display = 'block';
+                    return;
+                }
+
+                const nombre = option.dataset.nombre || '';
+                const telf = option.dataset.telf || '';
+
+                if (nombre.includes(searchText) || telf.includes(searchText)) {
+                    option.style.display = 'block';
+                } else {
+                    option.style.display = 'none';
+                }
+            });
+        });
+
+        // Validación obligatoria de acompañantes en reserva de socio
+        document.getElementById('formReservaSocio').addEventListener('submit', function(e) {
+            const numeroCamas = parseInt(document.getElementById('numeroCamasSocio').value) || 1;
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (numeroCamas > 1 && acompanantesActualesSocio < acompanantesRequeridos) {
+                e.preventDefault();
+                alert(`Debes agregar ${acompanantesRequeridos} acompañante(s) para completar la reserva de ${numeroCamas} camas.\n\nAcompañantes agregados: ${acompanantesActualesSocio}\nAcompañantes requeridos: ${acompanantesRequeridos}`);
+                return false;
+            }
+        });
 
         // Validar fechas para reserva de socio
         document.getElementById('fechaFinSocio').addEventListener('change', function() {
@@ -1721,10 +2111,33 @@
                             </div>
                             <small class="text-muted" id="editInfoCamas"></small>
                         </div>
+
+                        <!-- Actividad a Realizar -->
+                        <div class="mb-3" id="editActividadContainer">
+                            <label class="form-label">Actividad a Realizar *</label>
+                            <textarea class="form-control" name="actividad" id="editActividad" rows="3" placeholder="Describe la actividad a realizar durante la estancia..."></textarea>
+                        </div>
+
+                        <!-- Sección de Acompañantes -->
+                        <div id="seccionAcompanantesEditar" style="display: none;">
+                            <hr>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-people-fill"></i> Acompañantes
+                                    <span id="badgeAcompanantesEditar" class="badge bg-info">0/0</span>
+                                </h6>
+                                <button type="button" class="btn btn-sm btn-primary" onclick="agregarAcompananteEditar()" id="btnAgregarAcompananteEditar">
+                                    <i class="bi bi-person-plus-fill"></i> Agregar
+                                </button>
+                            </div>
+                            <div id="containerAcompanantesEditar">
+                                <p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar los datos de los acompañantes.</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary" id="btnSubmitEditarReserva">
                             <i class="bi bi-check-circle"></i> Guardar Cambios
                         </button>
                     </div>
@@ -1737,16 +2150,27 @@
         // Variables para el modal de editar
         let maxCamasEditar = 1;
         let esTodoElRefugioEditar = false;
+        let acompanantesActualesEditar = 0;
+        let contadorAcompanantesEditar = 0;
 
         function editarReserva(reserva) {
             // Abrir modal
             const modal = new bootstrap.Modal(document.getElementById('modalEditarReserva'));
+
+            // Reiniciar acompañantes
+            acompanantesActualesEditar = 0;
+            contadorAcompanantesEditar = 0;
+            document.getElementById('containerAcompanantesEditar').innerHTML = '<p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar los datos de los acompañantes.</p>';
 
             // Rellenar datos
             document.getElementById('editIdReserva').value = reserva.id;
             document.getElementById('editFechaInicio').value = reserva.fecha_inicio;
             document.getElementById('editFechaFin').value = reserva.fecha_fin;
             document.getElementById('editNumeroCamas').value = reserva.numero_camas;
+            document.getElementById('editActividad').value = reserva.observaciones || '';
+
+            // Actualizar sección de acompañantes según número de camas
+            actualizarSeccionAcompanantesEditar(parseInt(reserva.numero_camas) || 1);
 
             // Usuario/Motivo (detectar si es especial)
             const esEspecial = !reserva.nombre;
@@ -1799,6 +2223,9 @@
             }
 
             input.value = nuevoValor;
+
+            // Actualizar sección de acompañantes
+            actualizarSeccionAcompanantesEditar(nuevoValor);
         }
 
         // Actualizar max camas cuando cambie habitación en edición
@@ -1806,8 +2233,151 @@
             const selectedOption = this.options[this.selectedIndex];
             maxCamasEditar = parseInt(selectedOption.dataset.maxCamas) || 1;
             document.getElementById('editNumeroCamas').max = maxCamasEditar;
-            document.getElementById('editNumeroCamas').value = Math.min(document.getElementById('editNumeroCamas').value, maxCamasEditar);
+            const numCamasActual = Math.min(document.getElementById('editNumeroCamas').value, maxCamasEditar);
+            document.getElementById('editNumeroCamas').value = numCamasActual;
             document.getElementById('editInfoCamas').textContent = `Máximo ${maxCamasEditar} camas disponibles`;
+
+            // Actualizar sección de acompañantes
+            actualizarSeccionAcompanantesEditar(numCamasActual);
+        });
+
+        // Funciones para gestionar acompañantes en modal de edición
+        function actualizarSeccionAcompanantesEditar(numeroCamas) {
+            const seccion = document.getElementById('seccionAcompanantesEditar');
+            const container = document.getElementById('containerAcompanantesEditar');
+            const badge = document.getElementById('badgeAcompanantesEditar');
+            const btnAgregar = document.getElementById('btnAgregarAcompananteEditar');
+
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (numeroCamas === 1) {
+                // Ocultar sección
+                seccion.style.display = 'none';
+                container.innerHTML = '';
+                acompanantesActualesEditar = 0;
+            } else {
+                // Mostrar sección
+                seccion.style.display = 'block';
+                badge.textContent = `${acompanantesActualesEditar}/${acompanantesRequeridos}`;
+
+                // Limpiar y reiniciar
+                container.innerHTML = '<p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar ' + acompanantesRequeridos + ' acompañante(s).</p>';
+                acompanantesActualesEditar = 0;
+                btnAgregar.disabled = false;
+            }
+        }
+
+        function agregarAcompananteEditar() {
+            const numeroCamas = parseInt(document.getElementById('editNumeroCamas').value) || 1;
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (acompanantesActualesEditar >= acompanantesRequeridos) {
+                alert('Ya has agregado todos los acompañantes necesarios');
+                return;
+            }
+
+            contadorAcompanantesEditar++;
+            acompanantesActualesEditar++;
+
+            const container = document.getElementById('containerAcompanantesEditar');
+            const badge = document.getElementById('badgeAcompanantesEditar');
+            const btnAgregar = document.getElementById('btnAgregarAcompananteEditar');
+
+            badge.textContent = `${acompanantesActualesEditar}/${acompanantesRequeridos}`;
+
+            if (acompanantesActualesEditar >= acompanantesRequeridos) {
+                btnAgregar.disabled = true;
+            }
+
+            const html = `
+                <div class="border rounded p-3 mb-3" id="acompanante-editar-${contadorAcompanantesEditar}">
+                    <div class="d-flex justify-content-between mb-2">
+                        <strong><i class="bi bi-person"></i> Acompañante #${acompanantesActualesEditar}</strong>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarAcompananteEditar(${contadorAcompanantesEditar})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label">DNI *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][dni]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nombre *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][nombre]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Apellido 1 *</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][apellido1]" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Apellido 2</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][apellido2]" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" id="esSocioEditar${contadorAcompanantesEditar}"
+                                       name="acompanantes[${contadorAcompanantesEditar}][es_socio]"
+                                       onchange="toggleNumSocioEditar(${contadorAcompanantesEditar})">
+                                <label class="form-check-label" for="esSocioEditar${contadorAcompanantesEditar}">
+                                    Es socio
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6" id="numSocioContainerEditar${contadorAcompanantesEditar}" style="display: none;">
+                            <label class="form-label">Nº Socio</label>
+                            <input type="text" name="acompanantes[${contadorAcompanantesEditar}][num_socio]" class="form-control form-control-sm">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Si es el primer acompañante, limpiar el mensaje
+            if (acompanantesActualesEditar === 1) {
+                container.innerHTML = html;
+            } else {
+                container.insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        function eliminarAcompananteEditar(id) {
+            const elemento = document.getElementById(`acompanante-editar-${id}`);
+            if (elemento) {
+                elemento.remove();
+                acompanantesActualesEditar--;
+
+                const numeroCamas = parseInt(document.getElementById('editNumeroCamas').value) || 1;
+                const acompanantesRequeridos = numeroCamas - 1;
+                const badge = document.getElementById('badgeAcompanantesEditar');
+                const btnAgregar = document.getElementById('btnAgregarAcompananteEditar');
+
+                badge.textContent = `${acompanantesActualesEditar}/${acompanantesRequeridos}`;
+                btnAgregar.disabled = false;
+
+                // Si no quedan acompañantes, mostrar mensaje
+                const container = document.getElementById('containerAcompanantesEditar');
+                if (acompanantesActualesEditar === 0) {
+                    container.innerHTML = '<p class="text-muted"><i class="bi bi-info-circle"></i> Debes agregar ' + acompanantesRequeridos + ' acompañante(s).</p>';
+                }
+            }
+        }
+
+        function toggleNumSocioEditar(id) {
+            const checkbox = document.getElementById(`esSocioEditar${id}`);
+            const container = document.getElementById(`numSocioContainerEditar${id}`);
+            container.style.display = checkbox.checked ? 'block' : 'none';
+        }
+
+        // Validación obligatoria de acompañantes en edición
+        document.getElementById('formEditarReserva').addEventListener('submit', function(e) {
+            const numeroCamas = parseInt(document.getElementById('editNumeroCamas').value) || 1;
+            const acompanantesRequeridos = numeroCamas - 1;
+
+            if (numeroCamas > 1 && acompanantesActualesEditar < acompanantesRequeridos) {
+                e.preventDefault();
+                alert(`Debes agregar ${acompanantesRequeridos} acompañante(s) para completar la reserva de ${numeroCamas} camas.\n\nAcompañantes agregados: ${acompanantesActualesEditar}\nAcompañantes requeridos: ${acompanantesRequeridos}`);
+                return false;
+            }
         });
 
         // Validar fechas en edición

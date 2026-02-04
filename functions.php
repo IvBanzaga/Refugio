@@ -202,7 +202,7 @@ function listar_usuarios_paginado($conexion, $filtros = [])
                 OR dni LIKE :search
                 OR num_socio LIKE :search
             )";
-            $params[':search'] = '%' . $search . '%';
+            $params[':search']  = '%' . $search . '%';
         }
 
         // Agregar ordenación
@@ -254,7 +254,7 @@ function contar_usuarios($conexion, $filtros = [])
                 OR dni LIKE :search
                 OR num_socio LIKE :search
             )";
-            $params[':search'] = '%' . $search . '%';
+            $params[':search']  = '%' . $search . '%';
         }
 
         $stmt = $conexion->prepare($sql);
@@ -308,7 +308,7 @@ function export_usuarios_csv($conexion, $filtros = [])
                 OR dni LIKE :search
                 OR num_socio LIKE :search
             )";
-            $params[':search'] = '%' . $search . '%';
+            $params[':search']  = '%' . $search . '%';
         }
 
         $sql .= " ORDER BY $order_by $order_dir";
@@ -646,30 +646,30 @@ function listar_reservas($conexion, $filtros = [])
 
         // Filtros básicos
         if (isset($filtros['estado'])) {
-            $sql .= " AND r.estado = :estado";
-            $params[':estado'] = $filtros['estado'];
+            $sql               .= " AND r.estado = :estado";
+            $params[':estado']  = $filtros['estado'];
         }
 
         if (isset($filtros['id_usuario'])) {
-            $sql .= " AND r.id_usuario = :id_usuario";
-            $params[':id_usuario'] = $filtros['id_usuario'];
+            $sql                   .= " AND r.id_usuario = :id_usuario";
+            $params[':id_usuario']  = $filtros['id_usuario'];
         }
 
         if (isset($filtros['fecha_inicio'])) {
-            $sql .= " AND r.fecha_inicio >= :fecha_inicio";
-            $params[':fecha_inicio'] = $filtros['fecha_inicio'];
+            $sql                     .= " AND r.fecha_inicio >= :fecha_inicio";
+            $params[':fecha_inicio']  = $filtros['fecha_inicio'];
         }
 
         if (isset($filtros['fecha_fin'])) {
-            $sql .= " AND r.fecha_fin <= :fecha_fin";
-            $params[':fecha_fin'] = $filtros['fecha_fin'];
+            $sql                  .= " AND r.fecha_fin <= :fecha_fin";
+            $params[':fecha_fin']  = $filtros['fecha_fin'];
         }
 
         // Búsqueda
         if (! empty($filtros['search'])) {
-            $searchTerm = '%' . $filtros['search'] . '%';
-            $sql .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search)";
-            $params[':search'] = $searchTerm;
+            $searchTerm         = '%' . $filtros['search'] . '%';
+            $sql               .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search)";
+            $params[':search']  = $searchTerm;
         }
 
         $sql .= " GROUP BY r.id";
@@ -685,15 +685,15 @@ function listar_reservas($conexion, $filtros = [])
             $order_by = 'r.' . $order_by;
         }
 
-        $order_dir = strtoupper($filtros['order_dir'] ?? '') === 'ASC' ? 'ASC' : 'DESC';
-        $sql .= " ORDER BY $order_by $order_dir";
+        $order_dir  = strtoupper($filtros['order_dir'] ?? '') === 'ASC' ? 'ASC' : 'DESC';
+        $sql       .= " ORDER BY $order_by $order_dir";
 
         // Paginación
         if (isset($filtros['limit']) && isset($filtros['offset'])) {
             $sql .= " LIMIT :limit OFFSET :offset";
             // PDO limit/offset must be integers
-            $params[':limit']  = (int) $filtros['limit'];
-            $params[':offset'] = (int) $filtros['offset'];
+            $params[':limit']   = (int) $filtros['limit'];
+            $params[':offset']  = (int) $filtros['offset'];
         }
 
         $stmt = $conexion->prepare($sql);
@@ -733,19 +733,19 @@ function contar_reservas($conexion, $filtros = [])
         $params = [];
 
         if (isset($filtros['estado'])) {
-            $sql .= " AND r.estado = :estado";
-            $params[':estado'] = $filtros['estado'];
+            $sql               .= " AND r.estado = :estado";
+            $params[':estado']  = $filtros['estado'];
         }
 
         if (isset($filtros['id_usuario'])) {
-            $sql .= " AND r.id_usuario = :id_usuario";
-            $params[':id_usuario'] = $filtros['id_usuario'];
+            $sql                   .= " AND r.id_usuario = :id_usuario";
+            $params[':id_usuario']  = $filtros['id_usuario'];
         }
 
         if (! empty($filtros['search'])) {
-            $searchTerm = '%' . $filtros['search'] . '%';
-            $sql .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search)";
-            $params[':search'] = $searchTerm;
+            $searchTerm         = '%' . $filtros['search'] . '%';
+            $sql               .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search)";
+            $params[':search']  = $searchTerm;
         }
 
         $stmt = $conexion->prepare($sql);
@@ -848,8 +848,8 @@ function crear_reserva_para_socio($conexion, $datos)
 
         // Crear reserva con estado 'reservada' (aprobada automáticamente por admin)
         $stmt = $conexion->prepare("
-            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado)
-            VALUES (:id_usuario, :id_habitacion, :numero_camas, :fecha_inicio, :fecha_fin, 'reservada')
+            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, fecha_inicio, fecha_fin, estado, observaciones)
+            VALUES (:id_usuario, :id_habitacion, :numero_camas, :fecha_inicio, :fecha_fin, 'reservada', :actividad)
         ");
 
         $stmt->bindParam(':id_usuario', $datos['id_usuario'], PDO::PARAM_INT);
@@ -857,6 +857,7 @@ function crear_reserva_para_socio($conexion, $datos)
         $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
         $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
         $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt->bindParam(':actividad', $datos['actividad']);
         $stmt->execute();
 
         $id_reserva = $conexion->lastInsertId();
