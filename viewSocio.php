@@ -49,7 +49,7 @@
 
                 $datos_reserva = [
                     'id_usuario'    => $_SESSION['userId'],
-                    'id_habitacion' => isset($_POST['id_habitacion']) ? (int) $_POST['id_habitacion'] : 0,
+                    'id_habitacion' => 1,
                     'numero_camas'  => $numero_camas,
                     'fecha_inicio'  => $_POST['fecha_inicio'] ?? '',
                     'fecha_fin'     => $_POST['fecha_fin'] ?? '',
@@ -105,7 +105,7 @@
                 $id_reserva    = isset($_POST['id_reserva']) ? (int) $_POST['id_reserva'] : 0;
                 $fecha_inicio  = $_POST['fecha_inicio'] ?? '';
                 $fecha_fin     = $_POST['fecha_fin'] ?? '';
-                $id_habitacion = isset($_POST['id_habitacion']) ? (int) $_POST['id_habitacion'] : 0;
+                $id_habitacion = 1;
                 $numero_camas  = isset($_POST['numero_camas']) ? (int) $_POST['numero_camas'] : 0;
 
                 $reserva_actual = obtener_reserva($conexionPDO, $id_reserva);
@@ -482,17 +482,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																															                                            SELECT r.id, r.estado, h.numero as habitacion,
-																															                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																															                                            FROM reservas r
-																															                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																															                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																															                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																															                                            WHERE r.id_usuario = :id_usuario
-																															                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																															                                            AND r.estado IN ('pendiente', 'reservada')
-																															                                            GROUP BY r.id, r.estado, h.numero
-																															                                        ");
+																																	                                            SELECT r.id, r.estado, h.numero as habitacion,
+																																	                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																																	                                            FROM reservas r
+																																	                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																																	                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																																	                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																																	                                            WHERE r.id_usuario = :id_usuario
+																																	                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																																	                                            AND r.estado IN ('pendiente', 'reservada')
+																																	                                            GROUP BY r.id, r.estado, h.numero
+																																	                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -500,11 +500,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																															                                            SELECT COUNT(*) as total
-																															                                            FROM reservas
-																															                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																															                                            AND estado = 'reservada'
-																															                                        ");
+																																	                                            SELECT COUNT(*) as total
+																																	                                            FROM reservas
+																																	                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																																	                                            AND estado = 'reservada'
+																																	                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -608,7 +608,7 @@
                                         </small>
                                     </div>
                                 </div>
-                                <input type="hidden" name="id_habitacion" id="hiddenHabitacion" value="">
+                                <input type="hidden" name="id_habitacion" id="hiddenHabitacion" value="1">
                                 <input type="hidden" name="num_camas" id="hiddenNumCamas" value="1">
                             </div>
                         </div>
@@ -985,20 +985,8 @@
                             </div>
                         </div>
 
-                        <!-- Habitación -->
-                        <div class="mb-3">
-                            <label class="form-label">Habitación *</label>
-                            <select class="form-select" name="id_habitacion" id="editHabitacionUsuario" required>
-                                <option value="">Seleccione una habitación</option>
-                                <?php
-                                    $habitaciones_modal = listar_habitaciones($conexionPDO);
-                                foreach ($habitaciones_modal as $hab): ?>
-                                    <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
-                                        Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                        <!-- Habitación (oculto, siempre habitación 1) -->
+                        <input type="hidden" name="id_habitacion" id="editHabitacionUsuario" value="1">
 
                         <!-- Número de camas -->
                         <div class="mb-3">
@@ -1499,19 +1487,18 @@
                 window.fpEditFin.setDate(reserva.fecha_fin);
             }
 
-            document.getElementById('editHabitacionUsuario').value = reserva.id_habitacion;
+            document.getElementById('editHabitacionUsuario').value = 1; // Habitación default
             document.getElementById('editNumeroCamasUsuario').value = reserva.numero_camas;
 
-            // Actualizar info
-            const selectedOption = document.getElementById('editHabitacionUsuario').options[document.getElementById('editHabitacionUsuario').selectedIndex];
-            maxCamasEditUsuario = parseInt(selectedOption.dataset.maxCamas) || 1;
+            // Actualizar info - capacidad fija de 26 camas para habitación 1
+            maxCamasEditUsuario = 26;
             document.getElementById('editInfoCamasUsuario').textContent = `Máximo ${maxCamasEditUsuario} camas disponibles`;
 
             modal.show();
         }
 
         // Variables para edición de usuario
-        let maxCamasEditUsuario = 1;
+        let maxCamasEditUsuario = 26; // Capacidad fija de habitación 1
 
         function cambiarCamasEditUsuario(cambio) {
             const input = document.getElementById('editNumeroCamasUsuario');
@@ -1526,7 +1513,8 @@
             input.value = nuevoValor;
         }
 
-        // Actualizar max camas cuando cambie habitación en edición de usuario
+        // Actualizar max camas cuando cambie habitación - COMENTADO (habitación 1 siempre)
+        /*
         if (document.getElementById('editHabitacionUsuario')) {
             document.getElementById('editHabitacionUsuario').addEventListener('change', function() {
                 const selectedOption = this.options[this.selectedIndex];
@@ -1536,6 +1524,7 @@
                 document.getElementById('editInfoCamasUsuario').textContent = `Máximo ${maxCamasEditUsuario} camas disponibles`;
             });
         }
+        */
 
         // Función para ir a reserva con fecha preseleccionada
         function irAReserva(fecha) {

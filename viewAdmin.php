@@ -175,6 +175,30 @@
     // La función export_usuarios_pdf hace exit, nunca llegará aquí
     }
 
+    // AJAX: Verificar disponibilidad de camas
+    if (isset($_GET['ajax']) && $_GET['ajax'] === 'verificar_disponibilidad') {
+    header('Content-Type: application/json');
+
+    $id_habitacion = 1; // Habitación default
+    $fecha_inicio  = $_GET['fecha_inicio'] ?? '';
+    $fecha_fin     = $_GET['fecha_fin'] ?? '';
+
+    if (empty($fecha_inicio) || empty($fecha_fin)) {
+        echo json_encode(['error' => 'Fechas requeridas']);
+        exit;
+    }
+
+    $camas_disponibles = obtener_camas_disponibles($conexionPDO, $id_habitacion, $fecha_inicio, $fecha_fin);
+    $total_disponibles = count($camas_disponibles);
+
+    echo json_encode([
+        'success'         => true,
+        'disponibles'     => $total_disponibles,
+        'capacidad_total' => 26,
+    ]);
+    exit;
+    }
+
     // Procesar acciones de usuarios
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($accion) {
@@ -335,10 +359,10 @@
             break;
 
         case 'editar_reserva_admin':
+            $id_habitacion = 1; // Habitación default
             $id_reserva    = (int) $_POST['id_reserva'];
             $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
             $fecha_fin     = sanitize_input($_POST['fecha_fin']);
-            $id_habitacion = isset($_POST['id_habitacion']) && $_POST['id_habitacion'] !== '' ? (int) $_POST['id_habitacion'] : null;
             $numero_camas  = isset($_POST['numero_camas']) && $_POST['numero_camas'] !== '' ? (int) $_POST['numero_camas'] : 0;
             $actividad     = sanitize_input($_POST['actividad'] ?? '');
 
@@ -396,11 +420,13 @@
             break;
 
         case 'crear_reserva_especial':
+            $id_habitacion = 1; // Habitación default
+
             $datos = [
                 'motivo'        => sanitize_input($_POST['motivo']),
                 'fecha_inicio'  => sanitize_input($_POST['fecha_inicio']),
                 'fecha_fin'     => sanitize_input($_POST['fecha_fin']),
-                'id_habitacion' => (int) $_POST['id_habitacion'],
+                'id_habitacion' => $id_habitacion,
                 'numero_camas'  => (int) $_POST['numero_camas'],
             ];
 
@@ -429,27 +455,14 @@
                 $mensaje      = "Debe seleccionar al menos 1 cama";
                 $tipo_mensaje = 'danger';
             } else {
-                // Si id_habitacion es 0, es "Todo el Refugio"
-                if ($datos['id_habitacion'] === 0) {
-                    $datos['motivo']     = $motivo_completo;
-                    $datos['id_usuario'] = $id_usuario_especial;
-                    $resultado           = crear_reserva_todo_refugio($conexionPDO, $datos);
-                    if ($resultado) {
-                        $mensaje = "Reserva especial creada para TODO EL REFUGIO: " . htmlspecialchars($datos['motivo']);
-                    } else {
-                        $mensaje      = "Error al crear la reserva para todo el refugio. Verifica que haya camas disponibles.";
-                        $tipo_mensaje = 'danger';
-                    }
+                // Crear reserva especial
+                $datos['motivo']     = $motivo_completo;
+                $datos['id_usuario'] = $id_usuario_especial;
+                if (crear_reserva_especial_admin($conexionPDO, $datos)) {
+                    $mensaje = "Reserva especial creada exitosamente: " . htmlspecialchars($datos['motivo']);
                 } else {
-                    // Crear reserva especial para habitación individual
-                    $datos['motivo']     = $motivo_completo;
-                    $datos['id_usuario'] = $id_usuario_especial;
-                    if (crear_reserva_especial_admin($conexionPDO, $datos)) {
-                        $mensaje = "Reserva especial creada exitosamente: " . htmlspecialchars($datos['motivo']);
-                    } else {
-                        $mensaje      = "Error al crear la reserva especial. Verifica que haya camas disponibles.";
-                        $tipo_mensaje = 'danger';
-                    }
+                    $mensaje      = "Error al crear la reserva especial. Verifica que haya camas disponibles.";
+                    $tipo_mensaje = 'danger';
                 }
             }
             $accion = 'reservas';
@@ -458,7 +471,7 @@
         case 'crear_reserva_socio':
             try {
                 $id_usuario    = (int) $_POST['id_usuario'];
-                $id_habitacion = (int) $_POST['id_habitacion'];
+                $id_habitacion = 1; // Habitación default
                 $numero_camas  = (int) $_POST['numero_camas'];
                 $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
                 $fecha_fin     = sanitize_input($_POST['fecha_fin']);
@@ -548,8 +561,8 @@
                     $grupo = sanitize_input($_POST['grupo_personalizado']);
                 }
 
-                // Datos de reserva
-                $id_habitacion = (int) $_POST['id_habitacion'];
+                                    // Datos de reserva
+                $id_habitacion = 1; // Habitación default
                 $numero_camas  = (int) $_POST['numero_camas'];
                 $fecha_inicio  = sanitize_input($_POST['fecha_inicio']);
                 $fecha_fin     = sanitize_input($_POST['fecha_fin']);
@@ -1095,13 +1108,13 @@
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
                         <div>
-                            <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalReservaSocio">
+                            <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalReservaSocio" onclick="console.log('Click en botón Socio');">
                                 <i class="bi bi-person-plus"></i> Nueva Reserva Socio
                             </button>
-                            <button class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#modalReservaNoSocio">
+                            <button class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#modalReservaNoSocio" onclick="console.log('Click en botón No Socio');">
                                 <i class="bi bi-person"></i> Nueva Reserva No Socio
                             </button>
-                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservaEspecial">
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservaEspecial" onclick="console.log('Click en botón Especial');">
                                 <i class="bi bi-calendar-event"></i> Nueva Reserva Especial
                             </button>
                         </div>
@@ -1310,94 +1323,8 @@
                         </div>
                     </div>
 
-                    <!-- Reservas pendientes de aprobación - OCULTO
-                    <div class="card shadow-sm">
-                        <div class="card-header bg-warning text-white">
-                            <h5 class="mb-0"><i class="bi bi-clock-history"></i> Reservas Pendientes de Aprobación</h5>
-                        </div>
-                        <div class="card-body">
-                            <?php if (count($reservas_pendientes) > 0): ?>
-                                <div class="table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>Solicitante</th>
-                                                <th>Habitación</th>
-                                                <th>Camas</th>
-                                                <th>Fecha Entrada</th>
-                                                <th>Fecha Salida</th>
-                                                <th>Solicitado</th>
-                                                <th>Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($reservas_pendientes as $reserva): ?>
-                                                <tr>
-                                                    <td>
-                                                        <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
-                                                        <small class="text-muted"><?php echo htmlspecialchars($reserva['email']) ?></small>
-                                                    </td>
-                                                    <td><?php echo $reserva['habitacion_numero'] ?></td>
-                                                    <td><?php echo $reserva['camas_numeros'] ?? $reserva['numero_camas'] . ' camas' ?></td>
-                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-                                                    <td><?php echo date('d/m/Y H:i', strtotime($reserva['fecha_creacion'])) ?></td>
-                                                    <td>
-                                                        <form method="post" class="d-inline">
-                                                            <input type="hidden" name="accion" value="aprobar_reserva">
-                                                            <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-                                                            <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('¿Aprobar esta reserva?')">
-                                                                <i class="bi bi-check-circle"></i> Aprobar
-                                                            </button>
-                                                        </form>
-                                                        <form method="post" class="d-inline">
-                                                            <input type="hidden" name="accion" value="rechazar_reserva">
-                                                            <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
-                                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('¿Rechazar esta reserva?')">
-                                                                <i class="bi bi-x-circle"></i> Rechazar
-                                                            </button>
-                                                        </form>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php else: ?>
-                                <p class="text-muted text-center py-4">No hay reservas pendientes</p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    -->
-
-                    <!-- Estado de habitaciones - OCULTO
-                    <div class="card shadow-sm mt-4">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0"><i class="bi bi-building"></i> Estado de Habitaciones</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <?php foreach ($habitaciones as $hab): ?>
-                                    <div class="col-md-6 mb-3">
-                                        <div class="card">
-                                            <div class="card-body">
-                                                <h6>Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <?php echo $hab['numero'] ?></h6>
-                                                <div class="progress mb-2">
-                                                    <?php
-                                                        $porcentaje = ($hab['camas_libres'] / $hab['total_camas']) * 100;
-                                                        $color      = $porcentaje > 50 ? 'success' : ($porcentaje > 20 ? 'warning' : 'danger');
-                                                    ?>
-                                                    <div class="progress-bar bg-<?php echo $color ?>" style="width:<?php echo $porcentaje ?>%"></div>
-                                                </div>
-                                                <small><?php echo $hab['camas_libres'] ?> de<?php echo $hab['total_camas'] ?> camas libres</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                    </div>
-                    -->
+                    <!-- DEBUG: Fin del calendario -->
+                    <!-- DEBUG: Fin del Dashboard, antes del elseif usuarios -->
 
                 <?php elseif ($accion === 'usuarios' || $accion === 'editar_usuario'): ?>
                     <!-- Gestión de Usuarios -->
@@ -2036,15 +1963,17 @@
 
                 <?php endif; ?>
                 <!-- Fin de la sección de reservas -->
+                <!-- DEBUG: Después del endif de reservas -->
 
             </div> <!-- End col-md-10 -->
         </div> <!-- End row -->
     </div> <!-- End container-fluid -->
 
+    <!-- DEBUG: Inicio de sección de modales -->
     <!-- Modales de Reservas (disponibles en todas las vistas) -->
 
     <!-- Modal para Crear Reserva Socio -->
-                    <div class="modal fade" id="modalReservaSocio" tabindex="-1" aria-labelledby="modalReservaSocioLabel" aria-hidden="true">
+    <div class="modal fade" id="modalReservaSocio" tabindex="-1" aria-labelledby="modalReservaSocioLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
@@ -2081,17 +2010,20 @@
                             </select>
                         </div>
 
+                        <input type="hidden" name="id_habitacion" value="1">
+
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Fecha Inicio *</label>
                                 <input type="date" class="form-control" name="fecha_inicio" required
-                                       id="fechaInicioSocio" min="<?php echo date('Y-m-d'); ?>">
+                                       id="fechaInicioSocio" min="<?php echo date('Y-m-d'); ?>"
+                                       onchange="verificarDisponibilidadSocio()">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Fecha Fin *</label>
                                 <input type="date" class="form-control" name="fecha_fin" required
                                        id="fechaFinSocio" min="<?php echo date('Y-m-d'); ?>"
-                                       onchange="actualizarDisponibilidadSocio()">
+                                       onchange="verificarDisponibilidadSocio()">
                             </div>
                         </div>
 
@@ -2101,7 +2033,7 @@
                                 <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasSocio(-1)" id="btnDecrementarSocio" disabled>
                                     <i class="bi bi-dash"></i>
                                 </button>
-                                <input type="number" class="form-control text-center" name="num_camas"
+                                <input type="number" class="form-control text-center" name="numero_camas"
                                        id="numeroCamasSocio" value="1" min="1" max="26" required readonly>
                                 <button type="button" class="btn btn-outline-secondary" onclick="cambiarCamasSocio(1)" id="btnIncrementarSocio" disabled>
                                     <i class="bi bi-plus"></i>
@@ -2214,28 +2146,18 @@
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Fecha Inicio *</label>
                                 <input type="date" class="form-control" name="fecha_inicio" required
-                                       id="fechaInicioNoSocio" min="<?php echo date('Y-m-d'); ?>">
+                                       id="fechaInicioNoSocio" min="<?php echo date('Y-m-d'); ?>"
+                                       onchange="verificarDisponibilidadNoSocio()">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Fecha Fin *</label>
                                 <input type="date" class="form-control" name="fecha_fin" required
-                                       id="fechaFinNoSocio" min="<?php echo date('Y-m-d'); ?>">
+                                       id="fechaFinNoSocio" min="<?php echo date('Y-m-d'); ?>"
+                                       onchange="verificarDisponibilidadNoSocio()">
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label">Habitación *</label>
-                            <select class="form-select" name="id_habitacion" required id="selectHabitacionNoSocio">
-                                <option value="">Seleccione una habitación</option>
-                                <?php
-                                    $habitaciones = obtener_todas_habitaciones($conexionPDO);
-                                foreach ($habitaciones as $hab): ?>
-                                    <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
-                                        Habitación <?php echo $hab['numero'] ?> (Capacidad: <?php echo $hab['capacidad'] ?> camas)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                        <input type="hidden" name="id_habitacion" value="1">
 
                         <div class="mb-3">
                             <label class="form-label">Número de Camas *</label>
@@ -2249,7 +2171,7 @@
                                     <i class="bi bi-plus"></i>
                                 </button>
                             </div>
-                            <small class="text-muted" id="infoCamasNoSocio">Selecciona una habitación primero</small>
+                            <small class="text-muted" id="infoCamasNoSocio">Selecciona las fechas para ver disponibilidad</small>
                         </div>
 
                         <div class="mb-3">
@@ -2362,33 +2284,18 @@
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Fecha Inicio *</label>
                                 <input type="date" class="form-control" name="fecha_inicio" required
-                                       id="fechaInicioEspecial" min="<?php echo date('Y-m-d'); ?>">
+                                       id="fechaInicioEspecial" min="<?php echo date('Y-m-d'); ?>"
+                                       onchange="verificarDisponibilidadEspecial()">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Fecha Fin *</label>
                                 <input type="date" class="form-control" name="fecha_fin" required
-                                       id="fechaFinEspecial" min="<?php echo date('Y-m-d'); ?>">
+                                       id="fechaFinEspecial" min="<?php echo date('Y-m-d'); ?>"
+                                       onchange="verificarDisponibilidadEspecial()">
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label">Habitación *</label>
-                            <select class="form-select" name="id_habitacion" required id="selectHabitacionEspecial">
-                                <option value="">Seleccione una habitación</option>
-                                <option value="0" data-max-camas="<?php
-                                                                      $habitaciones        = obtener_todas_habitaciones($conexionPDO);
-                                                                      $total_camas_refugio = array_sum(array_column($habitaciones, 'capacidad'));
-                                                                  echo $total_camas_refugio;
-                                                                  ?>">
-                                    <strong>🏠 TODO EL REFUGIO</strong> (<?php echo $total_camas_refugio ?> camas totales)
-                                </option>
-                                <?php foreach ($habitaciones as $hab): ?>
-                                    <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
-                                        Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                        <input type="hidden" name="id_habitacion" value="1">
 
                         <div class="mb-3">
                             <label class="form-label">Número de Camas *</label>
@@ -2402,7 +2309,7 @@
                                     <i class="bi bi-plus"></i>
                                 </button>
                             </div>
-                            <small class="text-muted" id="infoCamasEspecial">Selecciona una habitación primero</small>
+                            <small class="text-muted" id="infoCamasEspecial">Selecciona las fechas para ver disponibilidad</small>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -2418,9 +2325,58 @@
 
     <script>
         // Control de número de camas para reserva especial
-        let maxCamasEspecial = 1;
+        let maxCamasEspecial = 26; // Capacidad de habitación 1
+        let camasDisponiblesEspecial = 26; // Se actualizará con AJAX
+
+        // Función para verificar disponibilidad de camas para Reserva Especial
+        function verificarDisponibilidadEspecial() {
+            const fechaInicio = document.getElementById('fechaInicioEspecial').value;
+            const fechaFin = document.getElementById('fechaFinEspecial').value;
+
+            if (!fechaInicio || !fechaFin) {
+                return;
+            }
+
+            fetch(`?ajax=verificar_disponibilidad&fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        camasDisponiblesEspecial = data.disponibles;
+                        maxCamasEspecial = data.disponibles;
+                        actualizarInfoCamasEspecial();
+
+                        // Ajustar valor actual si excede disponibilidad
+                        const inputCamas = document.getElementById('numeroCamasEspecial');
+                        if (parseInt(inputCamas.value) > maxCamasEspecial) {
+                            inputCamas.value = Math.max(1, maxCamasEspecial);
+                        }
+                    }
+                })
+                .catch(error => console.error('Error al verificar disponibilidad:', error));
+        }
+
+        function actualizarInfoCamasEspecial() {
+            const inputCamas = document.getElementById('numeroCamasEspecial');
+            const infoCamas = document.getElementById('infoCamasEspecial');
+            const numCamasSeleccionadas = parseInt(inputCamas.value) || 0;
+            const restantes = camasDisponiblesEspecial - numCamasSeleccionadas;
+
+            if (camasDisponiblesEspecial === 0) {
+                infoCamas.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> No hay camas disponibles en estas fechas</span>';
+            } else if (restantes < 0) {
+                infoCamas.innerHTML = `<span class="text-danger">Solo hay ${camasDisponiblesEspecial} camas disponibles</span>`;
+            } else {
+                infoCamas.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${restantes} cama(s) disponible(s) restante(s)</span>`;
+            }
+        }
         let esTodoElRefugio = false;
 
+        // ============================================================================
+        // NOTA: Event listeners de selectores de habitación comentados porque
+        // ahora se usa habitación 1 por defecto (oculta en la UI)
+        // ============================================================================
+
+        /*
         document.getElementById('selectHabitacionEspecial').addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
             const inputCamas = document.getElementById('numeroCamasEspecial');
@@ -2445,15 +2401,10 @@
                 infoCamas.textContent = `Máximo ${maxCamasEspecial} camas disponibles en esta habitación`;
             }
         });
+        */
 
         function cambiarCamasEspecial(cambio) {
             const input = document.getElementById('numeroCamasEspecial');
-            const habitacionSelect = document.getElementById('selectHabitacionEspecial');
-
-            if (!habitacionSelect.value) {
-                alert('Primero selecciona una habitación');
-                return;
-            }
 
             let nuevoValor = parseInt(input.value) + cambio;
 
@@ -2464,9 +2415,12 @@
             }
 
             input.value = nuevoValor;
+            actualizarInfoCamasEspecial(); // Actualizar contador de disponibles
         }
 
         // Validar que fecha fin sea igual o posterior a fecha inicio
+        // NOTA: Esta validación ya se maneja en los campos con onchange inline
+        /*
         document.getElementById('fechaFinEspecial').addEventListener('change', function() {
             const fechaInicio = document.getElementById('fechaInicioEspecial').value;
             const fechaFin = this.value;
@@ -2476,10 +2430,59 @@
                 this.value = '';
             }
         });
+        */
 
         // Control de número de camas para reserva de socio
-        let maxCamasSocio = 1;
+        let maxCamasSocio = 26; // Capacidad de la habitación 1
+        let camasDisponiblesSocio = 26; // Se actualizará con AJAX
 
+        // Función para verificar disponibilidad de camas vía AJAX
+        function verificarDisponibilidadSocio() {
+            const fechaInicio = document.getElementById('fechaInicioSocio').value;
+            const fechaFin = document.getElementById('fechaFinSocio').value;
+
+            if (!fechaInicio || !fechaFin) {
+                return;
+            }
+
+            fetch(`?ajax=verificar_disponibilidad&fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        camasDisponiblesSocio = data.disponibles;
+                        maxCamasSocio = data.disponibles;
+                        actualizarInfoCamasSocio();
+
+                        // Habilitar botones de incremento/decremento
+                        document.getElementById('btnDecrementarSocio').disabled = false;
+                        document.getElementById('btnIncrementarSocio').disabled = false;
+
+                        // Ajustar valor actual si excede disponibilidad
+                        const inputCamas = document.getElementById('numeroCamasSocio');
+                        if (parseInt(inputCamas.value) > maxCamasSocio) {
+                            inputCamas.value = Math.max(1, maxCamasSocio);
+                        }
+                    }
+                })
+                .catch(error => console.error('Error al verificar disponibilidad:', error));
+        }
+
+        function actualizarInfoCamasSocio() {
+            const inputCamas = document.getElementById('numeroCamasSocio');
+            const infoCamas = document.getElementById('infoCamasSocio');
+            const numCamasSeleccionadas = parseInt(inputCamas.value) || 0;
+            const restantes = camasDisponiblesSocio - numCamasSeleccionadas;
+
+            if (camasDisponiblesSocio === 0) {
+                infoCamas.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> No hay camas disponibles en estas fechas</span>';
+            } else if (restantes < 0) {
+                infoCamas.innerHTML = `<span class="text-danger">Solo hay ${camasDisponiblesSocio} camas disponibles</span>`;
+            } else {
+                infoCamas.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${restantes} cama(s) disponible(s) restante(s)</span>`;
+            }
+        }
+
+        /*
         document.getElementById('selectHabitacionSocio').addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
             const inputCamas = document.getElementById('numeroCamasSocio');
@@ -2493,18 +2496,13 @@
             // Actualizar sección de acompañantes
             actualizarSeccionAcompanantesSocio(1);
         });
+        */
 
         let contadorAcompanantesSocio = 0;
         let acompanantesActualesSocio = 0;
 
         function cambiarCamasSocio(cambio) {
             const input = document.getElementById('numeroCamasSocio');
-            const habitacionSelect = document.getElementById('selectHabitacionSocio');
-
-            if (!habitacionSelect.value) {
-                alert('Primero selecciona una habitación');
-                return;
-            }
 
             let nuevoValor = parseInt(input.value) + cambio;
 
@@ -2515,6 +2513,7 @@
             }
 
             input.value = nuevoValor;
+            actualizarInfoCamasSocio(); // Actualizar contador de disponibles
             actualizarSeccionAcompanantesSocio(nuevoValor);
         }
 
@@ -2694,7 +2693,50 @@
         });
 
         // ========== FUNCIONES PARA MODAL DE RESERVA NO SOCIO ==========
-        let maxCamasNoSocio = 1;
+        let maxCamasNoSocio = 26; // Capacidad de habitación 1
+        let camasDisponiblesNoSocio = 26; // Se actualizará con AJAX
+
+        // Función para verificar disponibilidad de camas para No Socio
+        function verificarDisponibilidadNoSocio() {
+            const fechaInicio = document.getElementById('fechaInicioNoSocio').value;
+            const fechaFin = document.getElementById('fechaFinNoSocio').value;
+
+            if (!fechaInicio || !fechaFin) {
+                return;
+            }
+
+            fetch(`?ajax=verificar_disponibilidad&fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        camasDisponiblesNoSocio = data.disponibles;
+                        maxCamasNoSocio = data.disponibles;
+                        actualizarInfoCamasNoSocio();
+
+                        // Ajustar valor actual si excede disponibilidad
+                        const inputCamas = document.getElementById('numeroCamasNoSocio');
+                        if (parseInt(inputCamas.value) > maxCamasNoSocio) {
+                            inputCamas.value = Math.max(1, maxCamasNoSocio);
+                        }
+                    }
+                })
+                .catch(error => console.error('Error al verificar disponibilidad:', error));
+        }
+
+        function actualizarInfoCamasNoSocio() {
+            const inputCamas = document.getElementById('numeroCamasNoSocio');
+            const infoCamas = document.getElementById('infoCamasNoSocio');
+            const numCamasSeleccionadas = parseInt(inputCamas.value) || 0;
+            const restantes = camasDisponiblesNoSocio - numCamasSeleccionadas;
+
+            if (camasDisponiblesNoSocio === 0) {
+                infoCamas.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> No hay camas disponibles en estas fechas</span>';
+            } else if (restantes < 0) {
+                infoCamas.innerHTML = `<span class="text-danger">Solo hay ${camasDisponiblesNoSocio} camas disponibles</span>`;
+            } else {
+                infoCamas.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${restantes} cama(s) disponible(s) restante(s)</span>`;
+            }
+        }
         let acompanantesActualesNoSocio = 0;
         let contadorAcompanantesNoSocio = 0;
 
@@ -2780,7 +2822,8 @@
             }
         });
 
-        // Event listener para cambio de habitación No Socio
+        // Event listener para cambio de habitación No Socio - COMENTADO (ahora usa habitación 1 por defecto)
+        /*
         document.getElementById('selectHabitacionNoSocio').addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
             if (selectedOption.value) {
@@ -2791,6 +2834,7 @@
                 actualizarSeccionAcompanantesNoSocio(1);
             }
         });
+        */
 
         function cambiarCamasNoSocio(cambio) {
             const input = document.getElementById('numeroCamasNoSocio');
@@ -2803,6 +2847,7 @@
             }
 
             input.value = nuevoValor;
+            actualizarInfoCamasNoSocio(); // Actualizar contador de disponibles
             actualizarSeccionAcompanantesNoSocio(nuevoValor);
         }
 
@@ -2980,20 +3025,8 @@
                             </div>
                         </div>
 
-                        <!-- Habitación (solo para reservas con habitación específica) -->
-                        <div class="mb-3" id="editHabitacionContainer">
-                            <label class="form-label">Habitación</label>
-                            <select class="form-select" name="id_habitacion" id="editHabitacion">
-                                <option value="">Seleccione una habitación</option>
-                                <?php
-                                    $habitaciones = obtener_todas_habitaciones($conexionPDO);
-                                foreach ($habitaciones as $hab): ?>
-                                    <option value="<?php echo $hab['id'] ?>" data-max-camas="<?php echo $hab['capacidad'] ?>">
-                                        Habitación                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                <?php echo $hab['numero'] ?> (Capacidad:<?php echo $hab['capacidad'] ?> camas)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                        <!-- Habitación (oculto - siempre habitación 1) -->
+                        <input type="hidden" name="id_habitacion" id="editHabitacion" value="1">
 
                         <!-- Número de camas -->
                         <div class="mb-3" id="editCamasContainer">
@@ -3047,7 +3080,7 @@
 
     <script>
         // Variables para el modal de editar
-        let maxCamasEditar = 1;
+        let maxCamasEditar = 26; // Capacidad de habitación 1
         let esTodoElRefugioEditar = false;
         let acompanantesActualesEditar = 0;
         let contadorAcompanantesEditar = 0;
@@ -3107,30 +3140,19 @@
                 document.getElementById('editEmail').value = reserva.email || '-';
             }
 
-            // Habitación
-            const habitacionContainer = document.getElementById('editHabitacionContainer');
+            // Habitación - simplificado, ya no hay opción "TODO EL REFUGIO"
             const camasContainer = document.getElementById('editCamasContainer');
             const editHabitacion = document.getElementById('editHabitacion');
 
-            if (esTodoRefugio) {
-                // TODO EL REFUGIO: ocultar habitación y camas
-                habitacionContainer.style.display = 'none';
-                camasContainer.style.display = 'none';
-                editHabitacion.removeAttribute('required');
-                document.getElementById('editNumeroCamas').removeAttribute('required');
-            } else {
-                // Habitación específica
-                habitacionContainer.style.display = 'block';
-                camasContainer.style.display = 'block';
-                editHabitacion.setAttribute('required', 'required');
-                document.getElementById('editNumeroCamas').setAttribute('required', 'required');
+            // Siempre mostrar contenedor de camas (habitación 1 por defecto)
+            camasContainer.style.display = 'block';
+            document.getElementById('editNumeroCamas').setAttribute('required', 'required');
 
-                if (reserva.id_habitacion) {
-                    editHabitacion.value = reserva.id_habitacion;
-                    const selectedOption = editHabitacion.options[editHabitacion.selectedIndex];
-                    maxCamasEditar = parseInt(selectedOption.dataset.maxCamas) || 1;
-                    document.getElementById('editInfoCamas').textContent = `Máximo ${maxCamasEditar} camas disponibles`;
-                }
+            if (reserva.id_habitacion) {
+                editHabitacion.value = reserva.id_habitacion;
+                // Capacidad fija de 26 camas para habitación 1
+                maxCamasEditar = 26;
+                document.getElementById('editInfoCamas').textContent = `Máximo ${maxCamasEditar} camas disponibles`;
             }
 
             modal.show();
@@ -3152,7 +3174,8 @@
             actualizarSeccionAcompanantesEditar(nuevoValor);
         }
 
-        // Actualizar max camas cuando cambie habitación en edición
+        // Actualizar max camas cuando cambie habitación en edición - COMENTADO (habitación 1 siempre)
+        /*
         document.getElementById('editHabitacion').addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
             maxCamasEditar = parseInt(selectedOption.dataset.maxCamas) || 1;
@@ -3164,6 +3187,7 @@
             // Actualizar sección de acompañantes
             actualizarSeccionAcompanantesEditar(numCamasActual);
         });
+        */
 
         // Funciones para gestionar acompañantes en modal de edición
         function actualizarSeccionAcompanantesEditar(numeroCamas) {
@@ -3359,6 +3383,19 @@
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Debug: Verificar que los modales existen en el DOM
+        document.addEventListener('DOMContentLoaded', function() {
+            const modalSocio = document.getElementById('modalReservaSocio');
+            const modalNoSocio = document.getElementById('modalReservaNoSocio');
+            const modalEspecial = document.getElementById('modalReservaEspecial');
+
+            console.log('Modal Socio existe:', modalSocio !== null);
+            console.log('Modal No Socio existe:', modalNoSocio !== null);
+            console.log('Modal Especial existe:', modalEspecial !== null);
+        });
+    </script>
 </body>
 </html>
 
