@@ -26,3 +26,11 @@
 1. Asignar a un socio específico una reserva especial o a un grupo o asociacion , esta bien marcarlo pero que se pueba buscar o seleccionar de la lista de socios , como cuando se realiza una reserva para una socio.
 
 1. Al editar una reservas de no socio , de socios o reservas espcial  tambien que muestre su telefono y email.
+
+1. Añadir recapcha en el login .
+
+
+
+1. Cuando un socio realiza la solicitud de una nueva reserva , que le envie un email al administrador informandole de que un socio ha realizado una nueva solicitud de reserva , con los datos del socio y de la reserva solicitada .
+
+1. Cuando se aprueba la solicitud de reserva de un socio , que se le envie un email al socio informandole que su solicitud de reserva ha sido aprobada , con los datos de la reserva aprobada .

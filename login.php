@@ -10,9 +10,41 @@
     /* TODO: Procesamiento de login. Se usa password_verify para comprobar la contraseña cifrada y session_regenerate_id(true) para evitar robo de sesión. Depuración: puedes poner breakpoint aquí para comprobar los datos recibidos y el resultado de la autenticación. */
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $email    = trim($_POST['user']);
-        $password = trim($_POST['password']);
+    $email    = trim($_POST['user']);
+    $password = trim($_POST['password']);
 
+    // Validar reCAPTCHA v2
+    $captcha_valid = false;
+    if (isset($_POST['g-recaptcha-response']) && ! empty($_POST['g-recaptcha-response'])) {
+        $captcha_response = $_POST['g-recaptcha-response'];
+        $secret_key       = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe'; // Clave de prueba de Google
+
+        $verify_url = 'https://www.google.com/recaptcha/api/siteverify';
+        $data       = [
+            'secret'   => $secret_key,
+            'response' => $captcha_response,
+        ];
+
+        $options = [
+            'http' => [
+                'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
+                'method'  => 'POST',
+                'content' => http_build_query($data),
+            ],
+        ];
+
+        $context = stream_context_create($options);
+        $result  = @file_get_contents($verify_url, false, $context);
+
+        if ($result !== false) {
+            $response_data = json_decode($result);
+            $captcha_valid = isset($response_data->success) && $response_data->success === true;
+        }
+    }
+
+    if (! $captcha_valid) {
+        $error = 'Por favor, completa la verificación de seguridad';
+    } else {
         $user = comprobar_username($conexionPDO, $email);
 
         /* TODO: Verificación segura de contraseña y gestión de sesión. Depuración: breakpoint útil para comprobar el array $user y el resultado de password_verify. */
@@ -38,6 +70,7 @@
             $error = 'Credenciales inválidas';
         }
     }
+    }
 ?>
 
 <!DOCTYPE html>
@@ -49,6 +82,15 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏔️</text></svg>">
   <title>Acceso a la aplicación</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  <style>
+    .captcha-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0;
+    }
+  </style>
 </head>
 
 <body class="bg-light">
@@ -68,12 +110,18 @@
             <form method="post">
               <div class="mb-3">
                 <label for="user" class="form-label">Email:</label>
-                <input type="email" class="form-control" id="user" name="user" placeholder="usuario@example.com" required>
+                <input type="email" class="form-control" id="user" name="user" placeholder="correo electronico" required>
               </div>
               <div class="mb-3">
                 <label for="password" class="form-label">Contraseña:</label>
                 <input type="password" class="form-control" id="password" name="password" required>
               </div>
+
+              <!-- reCAPTCHA v2 widget -->
+              <div class="captcha-container">
+                <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
+              </div>
+
               <div class="d-grid">
                 <button type="submit" class="btn btn-primary">Acceder</button>
               </div>
