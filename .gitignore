@@ -1,6 +1,7 @@
 # Archivos de configuración sensibles
 conexion.php
 config.php
+.env
 
 # Archivos de sistema
 .DS_Store

@@ -77,6 +77,30 @@
                 }
 
                 $mensaje = "Reserva creada exitosamente. Pendiente de aprobación por el administrador.";
+
+                // Enviar notificación por email al administrador
+                try {
+                    require_once 'email_notificaciones.php';
+
+                    // Obtener datos completos del socio
+                    $datosSocio = obtener_info_usuario($conexionPDO, $_SESSION['userId']);
+
+                    // Preparar datos de la reserva para el email
+                    $datosReservaEmail = [
+                        'id'           => $id_reserva,
+                        'fecha_inicio' => $datos_reserva['fecha_inicio'],
+                        'fecha_fin'    => $datos_reserva['fecha_fin'],
+                        'numero_camas' => $numero_camas,
+                        'actividad'    => $datos_reserva['actividad'],
+                    ];
+
+                    // Intentar enviar el email (no falla si el email no se envía)
+                    notificar_admin_nueva_reserva($datosReservaEmail, $datosSocio);
+                } catch (Exception $emailError) {
+                    // Log del error pero no interrumpir el flujo
+                    error_log("Error al enviar email de notificación: " . $emailError->getMessage());
+                }
+
             } catch (Exception $e) {
                 $mensaje      = "Error al crear la reserva: " . $e->getMessage();
                 $tipo_mensaje = 'danger';
@@ -555,17 +579,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																																							                                            SELECT r.id, r.estado, h.numero as habitacion,
-																																							                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																																							                                            FROM reservas r
-																																							                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																																							                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																																							                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																																							                                            WHERE r.id_usuario = :id_usuario
-																																							                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																																							                                            AND r.estado IN ('pendiente', 'reservada')
-																																							                                            GROUP BY r.id, r.estado, h.numero
-																																							                                        ");
+																																								                                            SELECT r.id, r.estado, h.numero as habitacion,
+																																								                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																																								                                            FROM reservas r
+																																								                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																																								                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																																								                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																																								                                            WHERE r.id_usuario = :id_usuario
+																																								                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																																								                                            AND r.estado IN ('pendiente', 'reservada')
+																																								                                            GROUP BY r.id, r.estado, h.numero
+																																								                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -573,11 +597,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																																							                                            SELECT COUNT(*) as total
-																																							                                            FROM reservas
-																																							                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																																							                                            AND estado = 'reservada'
-																																							                                        ");
+																																								                                            SELECT COUNT(*) as total
+																																								                                            FROM reservas
+																																								                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																																								                                            AND estado = 'reservada'
+																																								                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();

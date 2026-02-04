@@ -282,6 +282,35 @@
             $id = (int) $_POST['id'];
             if (actualizar_estado_reserva($conexionPDO, $id, 'reservada')) {
                 $mensaje = "Reserva aprobada exitosamente";
+
+                // Enviar notificación por email al socio
+                try {
+                    require_once 'email_notificaciones.php';
+
+                    // Obtener datos completos de la reserva y el socio
+                    $reserva = obtener_reserva($conexionPDO, $id);
+
+                    if ($reserva && ! empty($reserva['email'])) {
+                        $datosSocio = [
+                            'nombre'    => $reserva['usuario_nombre'],
+                            'apellido1' => $reserva['usuario_apellido1'],
+                            'apellido2' => '',
+                            'email'     => $reserva['email'],
+                        ];
+
+                        $datosReserva = [
+                            'id'           => $reserva['id'],
+                            'fecha_inicio' => $reserva['fecha_inicio'],
+                            'fecha_fin'    => $reserva['fecha_fin'],
+                            'numero_camas' => $reserva['numero_camas'],
+                            'actividad'    => $reserva['observaciones'] ?? '',
+                        ];
+
+                        notificar_socio_reserva_aprobada($datosReserva, $datosSocio);
+                    }
+                } catch (Exception $emailError) {
+                    error_log("Error al enviar email de aprobación: " . $emailError->getMessage());
+                }
             } else {
                 $mensaje      = "Error al aprobar la reserva";
                 $tipo_mensaje = 'danger';
@@ -291,8 +320,41 @@
 
         case 'rechazar_reserva':
             $id = (int) $_POST['id'];
+
+            // Obtener datos antes de cancelar
+            $reserva = obtener_reserva($conexionPDO, $id);
+
             if (cancelar_reserva($conexionPDO, $id)) {
                 $mensaje = "Reserva rechazada exitosamente";
+
+                // Enviar notificación por email al socio
+                try {
+                    require_once 'email_notificaciones.php';
+
+                    if ($reserva && ! empty($reserva['email'])) {
+                        $datosSocio = [
+                            'nombre'    => $reserva['usuario_nombre'],
+                            'apellido1' => $reserva['usuario_apellido1'],
+                            'apellido2' => '',
+                            'email'     => $reserva['email'],
+                        ];
+
+                        $datosReserva = [
+                            'id'           => $reserva['id'],
+                            'fecha_inicio' => $reserva['fecha_inicio'],
+                            'fecha_fin'    => $reserva['fecha_fin'],
+                            'numero_camas' => $reserva['numero_camas'],
+                        ];
+
+                        notificar_socio_reserva_cancelada(
+                            $datosReserva,
+                            $datosSocio,
+                            'La solicitud de reserva ha sido rechazada por el administrador'
+                        );
+                    }
+                } catch (Exception $emailError) {
+                    error_log("Error al enviar email de rechazo: " . $emailError->getMessage());
+                }
             } else {
                 $mensaje      = "Error al rechazar la reserva";
                 $tipo_mensaje = 'danger';
@@ -302,8 +364,38 @@
 
         case 'cancelar_reserva_admin':
             $id = (int) $_POST['id'];
+
+            // Obtener datos antes de cancelar
+            $reserva = obtener_reserva($conexionPDO, $id);
+
             if (cancelar_reserva($conexionPDO, $id)) {
                 $mensaje = "Reserva cancelada exitosamente";
+
+                // Enviar notificación por email al socio
+                try {
+                    require_once 'email_notificaciones.php';
+
+                    if ($reserva && ! empty($reserva['email'])) {
+                        $datosSocio = [
+                            'nombre'    => $reserva['usuario_nombre'],
+                            'apellido1' => $reserva['usuario_apellido1'],
+                            'apellido2' => '',
+                            'email'     => $reserva['email'],
+                        ];
+
+                        $datosReserva = [
+                            'id'           => $reserva['id'],
+                            'fecha_inicio' => $reserva['fecha_inicio'],
+                            'fecha_fin'    => $reserva['fecha_fin'],
+                            'numero_camas' => $reserva['numero_camas'],
+                        ];
+
+                        $motivo = isset($_POST['motivo']) ? $_POST['motivo'] : 'La reserva ha sido cancelada por el administrador';
+                        notificar_socio_reserva_cancelada($datosReserva, $datosSocio, $motivo);
+                    }
+                } catch (Exception $emailError) {
+                    error_log("Error al enviar email de cancelación: " . $emailError->getMessage());
+                }
             } else {
                 $mensaje      = "Error al cancelar la reserva";
                 $tipo_mensaje = 'danger';
