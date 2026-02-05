@@ -1,26 +1,25 @@
 <?php
-/**
+    /**
  * Login - Página de autenticación
  * Actualizado para usar el sistema MVC
  */
 
-// Cargar bootstrap
-require_once __DIR__ . '/config/bootstrap.php';
-require_once __DIR__ . '/conexion.php';
-require_once __DIR__ . '/functions.php';
+    // Cargar dependencias
+    require_once __DIR__ . '/conexion.php';
+    require_once __DIR__ . '/functions.php';
 
-// Si ya está autenticado, redirigir según rol
-if (isset($_SESSION['userId'])) {
+    // Si ya está autenticado, redirigir según rol
+    if (isset($_SESSION['userId'])) {
     if ($_SESSION['rol'] === 'admin') {
-        redirect('viewAdminMVC.php');
+        header('Location: viewAdmin.php');
     } else {
-        redirect('viewSocioMVC.php');
+        header('Location: viewSocio.php');
     }
-}
+    }
 
-/* TODO: Procesamiento de login. Se usa password_verify para comprobar la contraseña cifrada y session_regenerate_id(true) para evitar robo de sesión. Depuración: puedes poner breakpoint aquí para comprobar los datos recibidos y el resultado de la autenticación. */
+    /* TODO: Procesamiento de login. Se usa password_verify para comprobar la contraseña cifrada y session_regenerate_id(true) para evitar robo de sesión. Depuración: puedes poner breakpoint aquí para comprobar los datos recibidos y el resultado de la autenticación. */
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email    = trim($_POST['email'] ?? $_POST['user'] ?? '');
     $password = trim($_POST['password'] ?? '');
 
@@ -72,9 +71,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             /* TODO: Redirección según rol. Depuración: breakpoint útil para comprobar el valor de $user['rol']. */
             if ($user['rol'] === 'user') {
-                redirect('viewSocioMVC.php');
+                header('Location: viewSocio.php');
             } else if ($user['rol'] === 'admin') {
-                redirect('viewAdminMVC.php');
+                header('Location: viewAdmin.php');
             }
             exit;
         } else {
@@ -83,8 +82,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Redirigir con PRG pattern
-    redirect('login.php');
-}
+    header('Location: login.php');
+    exit;
+    }
 
-// Cargar la vista de login
-include VIEWS_PATH . '/auth/login.php';
+    // Recuperar mensajes de la sesión
+    $error = $_SESSION['error'] ?? '';
+    unset($_SESSION['error']);
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Refugio</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <style>
+        body {
+            background-color: #f5f5f5;
+            padding-top: 40px;
+            padding-bottom: 40px;
+        }
+        .form-signin {
+            max-width: 400px;
+            padding: 15px;
+            margin: 0 auto;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="form-signin">
+        <div class="card">
+            <div class="card-body p-4">
+                <h3 class="text-center mb-4">🏔️ Refugio de Montaña</h3>
+
+                <?php if ($error): ?>
+                    <div class="alert alert-danger"><?php echo htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <form method="POST" action="login.php">
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" required autofocus>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Contraseña</label>
+                        <input type="password" name="password" class="form-control" required>
+                    </div>
+
+                    <div class="d-flex justify-content-center mb-3">
+                        <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">Iniciar Sesión</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
