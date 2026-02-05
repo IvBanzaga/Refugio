@@ -3,6 +3,10 @@ conexion.php
 config.php
 .env
 
+# Composer
+/vendor/
+composer.lock
+
 # Archivos de sistema
 .DS_Store
 Thumbs.db

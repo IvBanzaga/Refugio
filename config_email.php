@@ -3,16 +3,50 @@
  * Configuración de Email para el Sistema de Reservas del Refugio
  */
 
+// Cargar PHPMailer
+require_once __DIR__ . '/vendor/autoload.php';
+
+use PHPMailer\PHPMailer\Exception;
+use PHPMailer\PHPMailer\PHPMailer;
+
+// Cargar variables de entorno desde .env
+$envFile = __DIR__ . '/.env';
+if (file_exists($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        // Ignorar comentarios y líneas vacías
+        if (strpos(trim($line), '#') === 0 || empty(trim($line))) {
+            continue;
+        }
+        // Parsear línea KEY=VALUE
+        if (strpos($line, '=') !== false) {
+            list($key, $value) = explode('=', $line, 2);
+            $key               = trim($key);
+            $value             = trim($value);
+            if (! empty($key)) {
+                $_ENV[$key] = $value;
+            }
+        }
+    }
+}
+
 // Email del administrador (donde llegarán las notificaciones)
-define('ADMIN_EMAIL', 'admin@refugio.com'); // CAMBIAR por el email real del administrador
-define('ADMIN_NAME', 'Administrador del Refugio');
+define('ADMIN_EMAIL', $_ENV['ADMIN_EMAIL'] ?? 'admin@refugio.com');
+define('ADMIN_NAME', $_ENV['ADMIN_NAME'] ?? 'Administrador del Refugio');
 
 // Email desde el cual se envían las notificaciones
-define('FROM_EMAIL', 'noreply@refugio.com'); // CAMBIAR por el email del sistema
-define('FROM_NAME', 'Sistema de Reservas - Refugio');
+define('FROM_EMAIL', $_ENV['FROM_EMAIL'] ?? 'noreply@refugio.com');
+define('FROM_NAME', $_ENV['FROM_NAME'] ?? 'Sistema de Reservas - Refugio');
 
 // Nombre del refugio
-define('REFUGIO_NAME', 'Refugio de Montaña');
+define('REFUGIO_NAME', $_ENV['REFUGIO_NAME'] ?? 'Refugio de Montaña');
+
+// Configuración SMTP
+define('SMTP_HOST', $_ENV['SMTP_HOST'] ?? '');
+define('SMTP_PORT', $_ENV['SMTP_PORT'] ?? 587);
+define('SMTP_USER', $_ENV['SMTP_USER'] ?? '');
+define('SMTP_PASS', $_ENV['SMTP_PASS'] ?? '');
+define('SMTP_SECURE', $_ENV['SMTP_SECURE'] ?? 'tls');
 
 /**
  * Función para enviar emails con formato HTML
@@ -24,29 +58,43 @@ define('REFUGIO_NAME', 'Refugio de Montaña');
  */
 function enviar_email($to, $toName, $subject, $body)
 {
-    // Verificar si el email está configurado (modo desarrollo)
-    if (ADMIN_EMAIL === 'admin@refugio.com' || FROM_EMAIL === 'noreply@refugio.com') {
-        // Modo simulación: emails no configurados, no intentar enviar
-        error_log("Email simulado (no configurado) - Para: $to - Asunto: $subject");
-        return true; // Retornar true para no interrumpir el flujo
+    $mail = new PHPMailer(true);
+
+    try {
+        // Verificar si SMTP está configurado
+        if (empty(SMTP_HOST) || empty(SMTP_USER) || empty(SMTP_PASS)) {
+            error_log("Email simulado (SMTP no configurado) - Para: $to - Asunto: $subject");
+            return true;
+        }
+
+        // Configuración del servidor SMTP
+        $mail->isSMTP();
+        $mail->Host       = SMTP_HOST;
+        $mail->SMTPAuth   = true;
+        $mail->Username   = SMTP_USER;
+        $mail->Password   = SMTP_PASS;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port       = SMTP_PORT;
+        $mail->CharSet    = 'UTF-8';
+
+        // Remitente y destinatario
+        $mail->setFrom(FROM_EMAIL, FROM_NAME);
+        $mail->addAddress($to, $toName);
+
+        // Contenido del email
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body    = $body;
+
+        // Enviar
+        $mail->send();
+        error_log("Email enviado correctamente a: $to - Asunto: $subject");
+        return true;
+
+    } catch (Exception $e) {
+        error_log("Error al enviar email: {$mail->ErrorInfo}");
+        return false;
     }
-
-    // Cabeceras del email
-    $headers  = "MIME-Version: 1.0" . "\r\n";
-    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-    $headers .= "From: " . FROM_NAME . " <" . FROM_EMAIL . ">" . "\r\n";
-    $headers .= "Reply-To: " . FROM_EMAIL . "\r\n";
-    $headers .= "X-Mailer: PHP/" . phpversion();
-
-    // Enviar el email (suprimir warnings si el servidor SMTP no está configurado)
-    $resultado = @mail($to, $subject, $body, $headers);
-
-    // Log del resultado (opcional)
-    if (! $resultado) {
-        error_log("Error al enviar email a: $to - Asunto: $subject");
-    }
-
-    return $resultado;
 }
 
 /**
