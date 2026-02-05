@@ -318,10 +318,12 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($reservas_canceladas as $reserva): ?>
+                            <?php foreach ($reservas_canceladas as $reserva):
+                                    $usuario_info = mostrar_usuario_reserva($reserva);
+                            ?>
                                 <tr>
                                     <td>
-                                        <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong>
+                                        <strong><?php echo $usuario_info['display'] ?></strong>
                                     </td>
                                     <td><?php echo $reserva['numero_camas'] ?></td>
                                     <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>

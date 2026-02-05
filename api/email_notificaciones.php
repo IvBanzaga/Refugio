@@ -3,7 +3,7 @@
  * Funciones para envío de notificaciones por email
  */
 
-require_once 'config_email.php';
+require_once __DIR__ . '/../config/email.php';
 
 /**
  * Enviar notificación al administrador cuando un socio crea una nueva reserva

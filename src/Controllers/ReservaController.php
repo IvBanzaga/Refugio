@@ -338,7 +338,7 @@ class ReservaController
             $_SESSION['error'] = 'Error al rechazar la reserva: ' . $e->getMessage();
         }
 
-        redirect('viewAdminMVC.php?accion=reservas&tab=pendientes');
+        redirect('viewAdminMVC.php?accion=reservas&tab=canceladas');
     }
 
     /**
@@ -379,7 +379,7 @@ class ReservaController
 
         // Redirigir según el rol
         if ($_SESSION['rol'] === 'admin') {
-            redirect('viewAdminMVC.php?accion=reservas&tab=aprobadas');
+            redirect('viewAdminMVC.php?accion=reservas&tab=canceladas');
         } else {
             redirect('viewSocioMVC.php?accion=mis_reservas');
         }

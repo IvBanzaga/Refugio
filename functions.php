@@ -533,11 +533,21 @@
             $campos           = explode('|', $datos_personales);
             $nombre           = isset($campos[1]) ? $campos[1] : 'No Socio';
 
-            $grupo = '';
+            // Extraer email, teléfono, DNI
+            $email    = '';
+            $telefono = '';
+            $dni      = '';
+            $grupo    = '';
+
             foreach ($campos as $campo) {
-                if (strpos($campo, 'Grupo:') === 0) {
+                if (strpos($campo, 'Email:') === 0) {
+                    $email = str_replace('Email:', '', $campo);
+                } elseif (strpos($campo, 'Tel:') === 0) {
+                    $telefono = str_replace('Tel:', '', $campo);
+                } elseif (strpos($campo, 'DNI:') === 0) {
+                    $dni = str_replace('DNI:', '', $campo);
+                } elseif (strpos($campo, 'Grupo:') === 0) {
                     $grupo = str_replace('Grupo:', '', $campo);
-                    break;
                 }
             }
 
@@ -546,10 +556,56 @@
                 $montanero = ($grupo === 'Grupo de Montañeros de Tenerife') ? 'GMT' : $grupo;
             }
 
-            return ['es_no_socio' => true, 'nombre' => $nombre, 'actividad' => $actividad, 'grupo' => $grupo, 'montanero' => $montanero];
+            return [
+                'es_no_socio'     => true,
+                'nombre'          => $nombre,
+                'email'           => $email,
+                'telefono'        => $telefono,
+                'dni'             => $dni,
+                'actividad'       => $actividad,
+                'grupo'           => $grupo,
+                'montanero'       => $montanero,
+                'datos_completos' => $observaciones,
+            ];
         }
 
         if (strpos($observaciones, 'NO SOCIO:') === 0) {
+            // Nuevo formato con pipes (para reservas especiales)
+            if (strpos($observaciones, '|') !== false && strpos($observaciones, ' | ') === false) {
+                $partes          = explode('|', $observaciones);
+                $nombre_completo = str_replace('NO SOCIO: ', '', $partes[0]);
+
+                $email     = '';
+                $telefono  = '';
+                $dni       = '';
+                $actividad = '';
+
+                foreach ($partes as $parte) {
+                    if (strpos($parte, 'Email:') === 0) {
+                        $email = trim(str_replace('Email:', '', $parte));
+                    } elseif (strpos($parte, 'Telf:') === 0 || strpos($parte, 'Tel:') === 0) {
+                        $telefono = trim(str_replace(['Telf:', 'Tel:'], '', $parte));
+                    } elseif (strpos($parte, 'DNI:') === 0) {
+                        $dni = trim(str_replace('DNI:', '', $parte));
+                    } elseif (strpos($parte, 'Actividad:') === 0) {
+                        $actividad = trim(str_replace('Actividad:', '', $parte));
+                    }
+                }
+
+                return [
+                    'es_no_socio'     => true,
+                    'nombre'          => $nombre_completo,
+                    'email'           => $email,
+                    'telefono'        => $telefono,
+                    'dni'             => $dni,
+                    'actividad'       => $actividad,
+                    'grupo'           => '',
+                    'montanero'       => 'Otro',
+                    'datos_completos' => $observaciones,
+                ];
+            }
+
+            // Formato antiguo con espacios y barras verticales
             $partes          = explode(' | ', $observaciones);
             $nombre_completo = str_replace('NO SOCIO: ', '', $partes[0]);
             $actividad       = '';
@@ -577,9 +633,20 @@
 
         $datos_no_socio = $parsear_datos_no_socio($reserva['observaciones']);
         if ($datos_no_socio) {
+            // Construir información de contacto
+            $info_parts = [];
+            if (! empty($datos_no_socio['email'])) {
+                $info_parts[] = htmlspecialchars($datos_no_socio['email']);
+            }
+            if (! empty($datos_no_socio['telefono'])) {
+                $info_parts[] = '<i class="bi bi-telephone"></i> ' . htmlspecialchars($datos_no_socio['telefono']);
+            }
+
+            $info_line = ! empty($info_parts) ? '<br><small class="text-muted">' . implode(' | ', $info_parts) . '</small>' : '';
+
             return [
-                'display'   => 'NO SOCIO: ' . $datos_no_socio['nombre'],
-                'email'     => '',
+                'display'   => '🎫 No Socio: ' . $datos_no_socio['nombre'] . $info_line,
+                'email'     => $datos_no_socio['email'] ?? '',
                 'actividad' => $datos_no_socio['actividad'],
                 'montanero' => $datos_no_socio['montanero'] ?? 'Otro',
             ];

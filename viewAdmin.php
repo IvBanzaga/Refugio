@@ -19,16 +19,25 @@
         $datos_personales = $partes[0];
         $actividad        = isset($partes[1]) ? $partes[1] : '';
 
-        // Extraer solo el nombre (segunda parte antes del primer |)
+        // Extraer campos específicos
         $campos = explode('|', $datos_personales);
         $nombre = isset($campos[1]) ? $campos[1] : 'No Socio';
 
-        // Extraer grupo de montañeros
-        $grupo = '';
+        // Extraer email, teléfono, DNI
+        $email    = '';
+        $telefono = '';
+        $dni      = '';
+        $grupo    = '';
+
         foreach ($campos as $campo) {
-            if (strpos($campo, 'Grupo:') === 0) {
+            if (strpos($campo, 'Email:') === 0) {
+                $email = str_replace('Email:', '', $campo);
+            } elseif (strpos($campo, 'Tel:') === 0) {
+                $telefono = str_replace('Tel:', '', $campo);
+            } elseif (strpos($campo, 'DNI:') === 0) {
+                $dni = str_replace('DNI:', '', $campo);
+            } elseif (strpos($campo, 'Grupo:') === 0) {
                 $grupo = str_replace('Grupo:', '', $campo);
-                break;
             }
         }
 
@@ -45,6 +54,9 @@
         return [
             'es_no_socio'     => true,
             'nombre'          => $nombre,
+            'email'           => $email,
+            'telefono'        => $telefono,
+            'dni'             => $dni,
             'actividad'       => $actividad,
             'grupo'           => $grupo,
             'montanero'       => $montanero,
@@ -53,7 +65,44 @@
     }
 
     // Formato ANTIGUO: NO SOCIO: nombre | DNI: xxx | Tel: xxx | Email: xxx | Grupo: xxx | Actividad: xxx
+    // Formato ESPECIAL: NO SOCIO: Nombre|DNI:xxx|Telf:xxx|Email:xxx|Actividad:xxx
     if (strpos($observaciones, 'NO SOCIO:') === 0) {
+        // Nuevo formato con pipes sin espacios (para reservas especiales)
+        if (strpos($observaciones, '|') !== false && strpos($observaciones, ' | ') === false) {
+            $partes          = explode('|', $observaciones);
+            $nombre_completo = str_replace('NO SOCIO: ', '', $partes[0]);
+
+            $email     = '';
+            $telefono  = '';
+            $dni       = '';
+            $actividad = '';
+
+            foreach ($partes as $parte) {
+                if (strpos($parte, 'Email:') === 0) {
+                    $email = trim(str_replace('Email:', '', $parte));
+                } elseif (strpos($parte, 'Telf:') === 0 || strpos($parte, 'Tel:') === 0) {
+                    $telefono = trim(str_replace(['Telf:', 'Tel:'], '', $parte));
+                } elseif (strpos($parte, 'DNI:') === 0) {
+                    $dni = trim(str_replace('DNI:', '', $parte));
+                } elseif (strpos($parte, 'Actividad:') === 0) {
+                    $actividad = trim(str_replace('Actividad:', '', $parte));
+                }
+            }
+
+            return [
+                'es_no_socio'     => true,
+                'nombre'          => $nombre_completo,
+                'email'           => $email,
+                'telefono'        => $telefono,
+                'dni'             => $dni,
+                'actividad'       => $actividad,
+                'grupo'           => '',
+                'montanero'       => 'Otro',
+                'datos_completos' => $observaciones,
+            ];
+        }
+
+        // Formato antiguo con espacios y barras verticales
         $partes = explode(' | ', $observaciones);
 
         // Primera parte es "NO SOCIO: nombre"
@@ -95,9 +144,20 @@
     $datos_no_socio = parsear_datos_no_socio($reserva['observaciones']);
 
     if ($datos_no_socio) {
+        // Construir información de contacto
+        $info_parts = [];
+        if (! empty($datos_no_socio['email'])) {
+            $info_parts[] = htmlspecialchars($datos_no_socio['email']);
+        }
+        if (! empty($datos_no_socio['telefono'])) {
+            $info_parts[] = '<i class="bi bi-telephone"></i> ' . htmlspecialchars($datos_no_socio['telefono']);
+        }
+
+        $info_line = ! empty($info_parts) ? '<br><small class="text-muted">' . implode(' | ', $info_parts) . '</small>' : '';
+
         return [
-            'display'   => '🎫 NO SOCIO: ' . htmlspecialchars($datos_no_socio['nombre']),
-            'email'     => '',
+            'display'   => '🎫 No Socio: ' . htmlspecialchars($datos_no_socio['nombre']) . $info_line,
+            'email'     => htmlspecialchars($datos_no_socio['email'] ?? ''),
             'actividad' => htmlspecialchars($datos_no_socio['actividad']),
             'montanero' => htmlspecialchars($datos_no_socio['montanero'] ?? 'Otro'),
         ];
@@ -291,7 +351,7 @@
 
                 // Enviar notificación por email al socio
                 try {
-                    require_once 'email_notificaciones.php';
+                    require_once __DIR__ . '/api/email_notificaciones.php';
 
                     // Obtener datos completos de la reserva y el socio
                     $reserva = obtener_reserva($conexionPDO, $id);
@@ -338,7 +398,7 @@
 
                 // Enviar notificación por email al socio
                 try {
-                    require_once 'email_notificaciones.php';
+                    require_once __DIR__ . '/api/email_notificaciones.php';
 
                     if ($reserva && ! empty($reserva['email'])) {
                         $datosSocio = [
@@ -370,7 +430,7 @@
                 $_SESSION['mensaje']      = "Error al rechazar la reserva";
                 $_SESSION['tipo_mensaje'] = 'danger';
             }
-            header('Location: viewAdmin.php?accion=reservas');
+            header('Location: viewAdmin.php?accion=reservas&tab=canceladas');
             exit;
             break;
 
@@ -385,7 +445,7 @@
 
                 // Enviar notificación por email al socio
                 try {
-                    require_once 'email_notificaciones.php';
+                    require_once __DIR__ . '/api/email_notificaciones.php';
 
                     if ($reserva && ! empty($reserva['email'])) {
                         $datosSocio = [
@@ -414,7 +474,7 @@
                 $_SESSION['mensaje']      = "Error al cancelar la reserva";
                 $_SESSION['tipo_mensaje'] = 'danger';
             }
-            header('Location: viewAdmin.php?accion=reservas');
+            header('Location: viewAdmin.php?accion=reservas&tab=canceladas');
             exit;
             break;
 
@@ -583,23 +643,31 @@
 
             // Validar fechas
             if ($datos['fecha_inicio'] > $datos['fecha_fin']) {
-                $mensaje      = "La fecha de fin debe ser igual o posterior a la fecha de inicio";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "La fecha de fin debe ser igual o posterior a la fecha de inicio";
+                $_SESSION['tipo_mensaje'] = 'danger';
+                header("Location: viewAdmin.php?accion=reservas");
+                exit;
             } elseif ($datos['numero_camas'] < 1) {
-                $mensaje      = "Debe seleccionar al menos 1 cama";
-                $tipo_mensaje = 'danger';
+                $_SESSION['mensaje']      = "Debe seleccionar al menos 1 cama";
+                $_SESSION['tipo_mensaje'] = 'danger';
+                header("Location: viewAdmin.php?accion=reservas");
+                exit;
             } else {
                 // Crear reserva especial
                 $datos['motivo']     = $motivo_completo;
                 $datos['id_usuario'] = $id_usuario_especial;
                 if (crear_reserva_especial_admin($conexionPDO, $datos)) {
-                    $mensaje = "Reserva especial creada exitosamente";
+                    $_SESSION['mensaje']      = "Reserva especial creada exitosamente";
+                    $_SESSION['tipo_mensaje'] = 'success';
+                    header("Location: viewAdmin.php?accion=reservas&tab=aprobadas");
+                    exit;
                 } else {
-                    $mensaje      = "Error al crear la reserva especial. Verifica que haya camas disponibles.";
-                    $tipo_mensaje = 'danger';
+                    $_SESSION['mensaje']      = "Error al crear la reserva especial. Verifica que haya camas disponibles.";
+                    $_SESSION['tipo_mensaje'] = 'danger';
+                    header("Location: viewAdmin.php?accion=reservas");
+                    exit;
                 }
             }
-            $accion = 'reservas';
             break;
 
         case 'crear_reserva_socio':
@@ -946,7 +1014,7 @@
     } elseif ($accion === 'reservas') {
     // Parámetros de paginación y filtros
     $page      = isset($_GET['page']) ? (int) $_GET['page'] : 1;
-    $limit     = 5;
+    $limit     = 10;
     $offset    = ($page - 1) * $limit;
     $search    = $_GET['search'] ?? '';
     $sort      = $_GET['sort'] ?? 'fecha_inicio';
@@ -2025,14 +2093,15 @@
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <?php foreach ($reservas_canceladas as $reserva): ?>
+                                                    <?php foreach ($reservas_canceladas as $reserva):
+                                                            $usuario_info = mostrar_usuario_reserva($reserva);
+                                                    ?>
                                                         <tr>
                                                             <td>
                                                                 <input type="checkbox" class="form-check-input reserva-checkbox" name="ids_reservas[]" value="<?php echo $reserva['id'] ?>" onchange="actualizarContador()">
                                                             </td>
                                                             <td>
-                                                                <strong><?php echo htmlspecialchars($reserva['nombre'] ? ($reserva['nombre'] . ' ' . $reserva['apellido1']) : $reserva['observaciones']) ?></strong><br>
-                                                                <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?><?php if (! empty($reserva['telf'])): ?> | <i class="bi bi-telephone"></i> <?php echo htmlspecialchars($reserva['telf']) ?><?php endif; ?></small>
+                                                                <strong><?php echo $usuario_info['display'] ?></strong>
                                                             </td>
                                                             <td><?php echo $reserva['numero_camas'] ?></td>
                                                             <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>

@@ -28,16 +28,25 @@ function parsear_datos_no_socio($observaciones)
         $datos_personales = $partes[0];
         $actividad        = isset($partes[1]) ? $partes[1] : '';
 
-        // Extraer solo el nombre (segunda parte antes del primer |)
+        // Extraer campos específicos
         $campos = explode('|', $datos_personales);
         $nombre = isset($campos[1]) ? $campos[1] : 'No Socio';
 
-        // Extraer grupo de montañeros
-        $grupo = '';
+        // Extraer email, teléfono, DNI
+        $email    = '';
+        $telefono = '';
+        $dni      = '';
+        $grupo    = '';
+
         foreach ($campos as $campo) {
-            if (strpos($campo, 'Grupo:') === 0) {
+            if (strpos($campo, 'Email:') === 0) {
+                $email = str_replace('Email:', '', $campo);
+            } elseif (strpos($campo, 'Tel:') === 0) {
+                $telefono = str_replace('Tel:', '', $campo);
+            } elseif (strpos($campo, 'DNI:') === 0) {
+                $dni = str_replace('DNI:', '', $campo);
+            } elseif (strpos($campo, 'Grupo:') === 0) {
                 $grupo = str_replace('Grupo:', '', $campo);
-                break;
             }
         }
 
@@ -54,6 +63,9 @@ function parsear_datos_no_socio($observaciones)
         return [
             'es_no_socio'     => true,
             'nombre'          => $nombre,
+            'email'           => $email,
+            'telefono'        => $telefono,
+            'dni'             => $dni,
             'actividad'       => $actividad,
             'grupo'           => $grupo,
             'montanero'       => $montanero,
@@ -62,7 +74,44 @@ function parsear_datos_no_socio($observaciones)
     }
 
     // Formato ANTIGUO: NO SOCIO: nombre | DNI: xxx | Tel: xxx | Email: xxx | Grupo: xxx | Actividad: xxx
+    // Formato ESPECIAL: NO SOCIO: Nombre|DNI:xxx|Telf:xxx|Email:xxx|Actividad:xxx
     if (strpos($observaciones, 'NO SOCIO:') === 0) {
+        // Nuevo formato con pipes (para reservas especiales)
+        if (strpos($observaciones, '|') !== false && strpos($observaciones, ' | ') === false) {
+            $partes          = explode('|', $observaciones);
+            $nombre_completo = str_replace('NO SOCIO: ', '', $partes[0]);
+
+            $email     = '';
+            $telefono  = '';
+            $dni       = '';
+            $actividad = '';
+
+            foreach ($partes as $parte) {
+                if (strpos($parte, 'Email:') === 0) {
+                    $email = trim(str_replace('Email:', '', $parte));
+                } elseif (strpos($parte, 'Telf:') === 0 || strpos($parte, 'Tel:') === 0) {
+                    $telefono = trim(str_replace(['Telf:', 'Tel:'], '', $parte));
+                } elseif (strpos($parte, 'DNI:') === 0) {
+                    $dni = trim(str_replace('DNI:', '', $parte));
+                } elseif (strpos($parte, 'Actividad:') === 0) {
+                    $actividad = trim(str_replace('Actividad:', '', $parte));
+                }
+            }
+
+            return [
+                'es_no_socio'     => true,
+                'nombre'          => $nombre_completo,
+                'email'           => $email,
+                'telefono'        => $telefono,
+                'dni'             => $dni,
+                'actividad'       => $actividad,
+                'grupo'           => '',
+                'montanero'       => 'Otro',
+                'datos_completos' => $observaciones,
+            ];
+        }
+
+        // Formato antiguo con espacios y barras verticales
         $partes          = explode(' | ', $observaciones);
         $nombre_completo = str_replace('NO SOCIO: ', '', $partes[0]);
 
@@ -102,9 +151,20 @@ function mostrar_usuario_reserva($reserva)
     $datos_no_socio = parsear_datos_no_socio($reserva['observaciones']);
 
     if ($datos_no_socio) {
+        // Construir línea de información
+        $info_parts = [];
+        if (! empty($datos_no_socio['email'])) {
+            $info_parts[] = htmlspecialchars($datos_no_socio['email']);
+        }
+        if (! empty($datos_no_socio['telefono'])) {
+            $info_parts[] = '<i class="bi bi-telephone"></i> ' . htmlspecialchars($datos_no_socio['telefono']);
+        }
+
+        $info_line = ! empty($info_parts) ? '<br><small class="text-muted">' . implode(' | ', $info_parts) . '</small>' : '';
+
         return [
-            'display'   => '🎫 NO SOCIO: ' . htmlspecialchars($datos_no_socio['nombre']),
-            'email'     => '',
+            'display'   => '🎫 No Socio: ' . htmlspecialchars($datos_no_socio['nombre']) . $info_line,
+            'email'     => htmlspecialchars($datos_no_socio['email'] ?? ''),
             'actividad' => htmlspecialchars($datos_no_socio['actividad']),
             'montanero' => htmlspecialchars($datos_no_socio['montanero'] ?? 'Otro'),
         ];
@@ -297,7 +357,7 @@ if ($accion === 'reservas') {
     $search    = $_GET['search'] ?? '';
     $sort      = $_GET['sort'] ?? 'fecha_inicio';
     $order_dir = $_GET['dir'] ?? 'ASC';
-    $limit     = 20;
+    $limit     = 10;
     $offset    = ($page - 1) * $limit;
 
     // Obtener totales
