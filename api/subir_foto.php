@@ -1,6 +1,6 @@
 <?php
-require_once 'conexion.php';
-require_once 'functions.php';
+require_once __DIR__ . '/../conexion.php';
+require_once __DIR__ . '/../functions.php';
 
 // Verificar sesión
 if (! isset($_SESSION['userId'])) {

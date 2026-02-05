@@ -1,0 +1,36 @@
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="<?php echo BASE_URL ?>/viewAdmin.php">
+            <i class="bi bi-house-heart-fill"></i> <?php echo REFUGIO_NAME ?> - Admin
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                        <?php if (! empty($_SESSION['foto'])): ?>
+                            <img src="<?php echo BASE_URL ?>/public/uploads/<?php echo htmlspecialchars($_SESSION['foto']) ?>"
+                                 class="rounded-circle" width="32" height="32" alt="Foto">
+                        <?php else: ?>
+                            <i class="bi bi-person-circle"></i>
+                        <?php endif; ?>
+                        <?php echo htmlspecialchars($_SESSION['usuario_nombre'] ?? 'Admin') ?>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL ?>/viewAdmin.php?accion=perfil">
+                            <i class="bi bi-person"></i> Mi Perfil
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL ?>/logout.php">
+                            <i class="bi bi-box-arrow-right"></i> Cerrar Sesión
+                        </a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>

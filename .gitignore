@@ -1,57 +1,82 @@
+# ===================================
 # Archivos de configuración sensibles
+# ===================================
 conexion.php
 config.php
 .env
+config/database.php
 
+# ===================================
 # Composer
+# ===================================
 /vendor/
 composer.lock
 
+# ===================================
+# Archivos subidos por usuarios
+# ===================================
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# ===================================
 # Archivos de sistema
+# ===================================
 .DS_Store
 Thumbs.db
 desktop.ini
 
+# ===================================
 # IDEs
+# ===================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
+# ===================================
 # Logs
+# ===================================
 *.log
 error_log
 
+# ===================================
 # Archivos temporales
+# ===================================
 *.tmp
 *.temp
 *.cache
-
-# Backups
-*.bak
-*.backup
-*~
-
-# Composer (si se usa en el futuro)
-/vendor/
-composer.lock
-
-# Node modules (si se usa en el futuro)
-node_modules/
-package-lock.json
-
-# Archivos de base de datos locales
-*.sqlite
-*.db
-
-# Archivos de sessión de PHP
 /tmp/
 /sessions/
 
-# Scripts de actualización (después de ejecutar)
-update_passwords.php
+# ===================================
+# Backups
+# ===================================
+*.bak
+*.backup
 
+# ===================================
+# Node modules (si se usa)
+# ===================================
+node_modules/
+package-lock.json
+
+# ===================================
+# Archivos de base de datos locales
+# ===================================
+*.sqlite
+*.db
+
+# ===================================
+# Scripts temporales
+# ===================================
+update_passwords.php
+generar_hashes.php
+verificar_mysql.php
+test_email.php
+
+# ===================================
+# Carpetas legacy (después de migrar)
+# ===================================
 actualizacion/
 instrucciones/
-sql/

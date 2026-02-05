@@ -1,6 +1,6 @@
 <?php
-require 'conexion.php';
-require 'functions.php';
+require __DIR__ . '/../conexion.php';
+require __DIR__ . '/../functions.php';
 
 header('Content-Type: application/json');
 

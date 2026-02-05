@@ -1,6 +1,6 @@
 <?php
-require 'conexion.php';
-require 'functions.php';
+require __DIR__ . '/../conexion.php';
+require __DIR__ . '/../functions.php';
 
 // Verificar que sea una petición AJAX
 if (! isset($_GET['fecha_inicio']) || ! isset($_GET['fecha_fin'])) {
