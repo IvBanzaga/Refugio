@@ -35,8 +35,9 @@
 
 1. El usuario puede tambien modificar su password desde su perfil.
 
-Pendientes :
 1. Cuando un socio realiza la solicitud de una nueva reserva , que le envie un email al administrador informandole de que un socio ha realizado una nueva solicitud de reserva , con los datos del socio y de la reserva solicitada .
 
 1. Cuando se aprueba la solicitud de reserva de un socio , que se le envie un email al socio informandole que su solicitud de reserva ha sido aprobada , con los datos de la reserva aprobada .
+
+1. Añadimos en la opcion de Crear Reserva Especial , existe que se puede crear por el propio admin que seria el Pertenece  de Grupo de Montañeros, existe Asignar a un socio especifico , y existe otro grupo o asocion deberia de ser un ckeck tambien y entonces que te de la posibilidad de ponen el nombre del grupo o asociacin o de marcarlo y de no poner nada . Tambien que exista la posibilidad de asignar a un no socio, en este caso se agregan los datos del responsable
 

@@ -1095,7 +1095,7 @@
         $sql = "
             SELECT r.id, r.fecha_inicio, r.fecha_fin, r.estado, r.fecha_creacion,
                    r.id_habitacion, r.numero_camas, r.observaciones,
-                   u.nombre, u.apellido1, u.apellido2, u.num_socio, u.email,
+                   u.nombre, u.apellido1, u.apellido2, u.num_socio, u.email, u.telf,
                    h.numero as habitacion_numero,
                    GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas_numeros
             FROM reservas r

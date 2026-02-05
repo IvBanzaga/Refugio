@@ -84,7 +84,7 @@
     // Si tiene nombre de usuario, es un socio
     if (! empty($reserva['nombre'])) {
         return [
-            'display'   => htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']),
+            'display'   => htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) . '<br><small class="text-muted">' . htmlspecialchars($reserva['email'] ?? '') . ' | <i class="bi bi-telephone"></i> ' . htmlspecialchars($reserva['telf'] ?? '') . '</small>',
             'email'     => htmlspecialchars($reserva['email'] ?? ''),
             'actividad' => htmlspecialchars($reserva['observaciones'] ?? '-'),
             'montanero' => 'GMT',
@@ -537,21 +537,48 @@
                 'numero_camas'  => (int) $_POST['numero_camas'],
             ];
 
-            // Determinar grupo de montañeros
-            $grupo = '';
+            // Determinar el tipo de reserva y procesar
+            $motivo_completo     = $datos['motivo'];
+            $id_usuario_especial = null;
+
+            // 1. Grupo de Montañeros de Tenerife
             if (isset($_POST['pertenece_grupo_tenerife_especial']) && $_POST['pertenece_grupo_tenerife_especial'] === 'on') {
-                $grupo = 'Grupo de Montañeros de Tenerife';
-            } elseif (! empty($_POST['grupo_personalizado_especial'])) {
-                $grupo = sanitize_input($_POST['grupo_personalizado_especial']);
+                $motivo_completo .= '|Grupo:Grupo de Montañeros de Tenerife';
             }
+            // 2. Asignar a un socio específico
+            elseif (isset($_POST['id_usuario_especial']) && ! empty($_POST['id_usuario_especial'])) {
+                $id_usuario_especial = (int) $_POST['id_usuario_especial'];
+            }
+            // 3. Otro grupo o asociación
+            elseif (isset($_POST['otroGrupoEspecial']) || ! empty($_POST['grupo_personalizado_especial'])) {
+                $grupo_nombre  = ! empty($_POST['grupo_personalizado_especial'])
+                    ? sanitize_input($_POST['grupo_personalizado_especial'])
+                    : 'Otro';
+                $motivo_completo .= '|Grupo:' . $grupo_nombre;
+            }
+            // 4. No socio
+            elseif (isset($_POST['asignarNoSocioEspecial']) && ! empty($_POST['nosocio_nombre'])) {
+                $noSocioData = [
+                    'nombre' => sanitize_input($_POST['nosocio_nombre']),
+                    'dni'    => sanitize_input($_POST['nosocio_dni'] ?? ''),
+                    'telf'   => sanitize_input($_POST['nosocio_telf'] ?? ''),
+                    'email'  => sanitize_input($_POST['nosocio_email'] ?? ''),
+                ];
 
-            // Verificar si se asigna a un socio específico
-            $id_usuario_especial = isset($_POST['id_usuario_especial']) && ! empty($_POST['id_usuario_especial']) ? (int) $_POST['id_usuario_especial'] : null;
-
-            // Crear motivo con grupo si existe
-            $motivo_completo = $datos['motivo'];
-            if (! empty($grupo)) {
-                $motivo_completo .= '|Grupo:' . $grupo;
+                // Formato: NO SOCIO: Nombre|DNI:xxx|Telf:xxx|Email:xxx
+                $motivo_completo = 'NO SOCIO: ' . $noSocioData['nombre'];
+                if (! empty($noSocioData['dni'])) {
+                    $motivo_completo .= '|DNI:' . $noSocioData['dni'];
+                }
+                if (! empty($noSocioData['telf'])) {
+                    $motivo_completo .= '|Telf:' . $noSocioData['telf'];
+                }
+                if (! empty($noSocioData['email'])) {
+                    $motivo_completo .= '|Email:' . $noSocioData['email'];
+                }
+                if (! empty($datos['motivo'])) {
+                    $motivo_completo .= '|Actividad:' . $datos['motivo'];
+                }
             }
 
             // Validar fechas
@@ -566,7 +593,7 @@
                 $datos['motivo']     = $motivo_completo;
                 $datos['id_usuario'] = $id_usuario_especial;
                 if (crear_reserva_especial_admin($conexionPDO, $datos)) {
-                    $mensaje = "Reserva especial creada exitosamente: " . htmlspecialchars($datos['motivo']);
+                    $mensaje = "Reserva especial creada exitosamente";
                 } else {
                     $mensaje      = "Error al crear la reserva especial. Verifica que haya camas disponibles.";
                     $tipo_mensaje = 'danger';
@@ -1760,7 +1787,7 @@
                                                     <tr>
                                                         <td>
                                                             <strong><?php echo htmlspecialchars($reserva['nombre'] . ' ' . $reserva['apellido1']) ?></strong><br>
-                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['email']) ?></small>
+                                                            <small class="text-muted"><?php echo htmlspecialchars($reserva['email']) ?> | <i class="bi bi-telephone"></i> <?php echo htmlspecialchars($reserva['telf']) ?></small>
                                                         </td>
                                                         <td><?php echo $reserva['numero_camas'] ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
@@ -2005,7 +2032,7 @@
                                                             </td>
                                                             <td>
                                                                 <strong><?php echo htmlspecialchars($reserva['nombre'] ? ($reserva['nombre'] . ' ' . $reserva['apellido1']) : $reserva['observaciones']) ?></strong><br>
-                                                                <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?></small>
+                                                                <small class="text-muted"><?php echo htmlspecialchars($reserva['email'] ?? '') ?><?php if (! empty($reserva['telf'])): ?> | <i class="bi bi-telephone"></i> <?php echo htmlspecialchars($reserva['telf']) ?><?php endif; ?></small>
                                                             </td>
                                                             <td><?php echo $reserva['numero_camas'] ?></td>
                                                             <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
@@ -2304,12 +2331,26 @@
                                    placeholder="Ej: Evento especial, Mantenimiento, etc.">
                         </div>
 
-                        <!-- Asignar a un socio específico (opcional) -->
+                        <div class="alert alert-secondary">
+                            <strong>Tipo de Reserva:</strong> Selecciona una opción
+                        </div>
+
+                        <!-- Grupo de Montañeros de Tenerife -->
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="asignarSocioEspecial" onchange="toggleSocioEspecial()">
+                                <input class="form-check-input" type="checkbox" id="perteneceGrupoTenerifeEspecial" name="pertenece_grupo_tenerife_especial" onchange="toggleTipoReservaEspecial('gmt')">
+                                <label class="form-check-label" for="perteneceGrupoTenerifeEspecial">
+                                    <strong>Grupo de Montañeros de Tenerife</strong>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Asignar a un socio específico -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="asignarSocioEspecial" onchange="toggleTipoReservaEspecial('socio')">
                                 <label class="form-check-label" for="asignarSocioEspecial">
-                                    Asignar a un socio específico
+                                    <strong>Asignar a un socio específico</strong>
                                 </label>
                             </div>
                         </div>
@@ -2337,19 +2378,58 @@
                             </div>
                         </div>
 
-                        <!-- Grupo de Montañeros -->
+                        <!-- Otro grupo o asociación -->
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="perteneceGrupoTenerifeEspecial" name="pertenece_grupo_tenerife_especial" onchange="toggleGrupoPersonalizadoEspecial()">
-                                <label class="form-check-label" for="perteneceGrupoTenerifeEspecial">
-                                    Pertenece al Grupo de Montañeros de Tenerife
+                                <input class="form-check-input" type="checkbox" id="otroGrupoEspecial" onchange="toggleTipoReservaEspecial('grupo')">
+                                <label class="form-check-label" for="otroGrupoEspecial">
+                                    <strong>Otro grupo o asociación</strong>
                                 </label>
                             </div>
                         </div>
-                        <div class="mb-3" id="grupoPersonalizadoContainerEspecial" style="display: block;">
-                            <label class="form-label">Otro Grupo o Asociación</label>
-                            <input type="text" class="form-control" name="grupo_personalizado_especial" id="grupoPersonalizadoEspecial" placeholder="Nombre del grupo o asociación...">
-                            <small class="text-muted">Si no pertenece a ningún grupo, dejar en blanco</small>
+
+                        <div id="grupoPersonalizadoContainerEspecial" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">Nombre del Grupo o Asociación</label>
+                                <input type="text" class="form-control" name="grupo_personalizado_especial" id="grupoPersonalizadoEspecial" placeholder="Nombre del grupo o asociación (opcional)">
+                                <small class="text-muted">Puedes dejarlo en blanco si no quieres especificar</small>
+                            </div>
+                        </div>
+
+                        <!-- Asignar a un no socio -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="asignarNoSocioEspecial" onchange="toggleTipoReservaEspecial('nosocio')">
+                                <label class="form-check-label" for="asignarNoSocioEspecial">
+                                    <strong>Asignar a un no socio</strong>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="noSocioEspecialContainer" style="display: none;">
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title">Datos del Responsable (No Socio)</h6>
+                                    <div class="row">
+                                        <div class="col-md-12 mb-2">
+                                            <label class="form-label">Nombre completo *</label>
+                                            <input type="text" class="form-control" name="nosocio_nombre" id="noSocioNombre" placeholder="Nombre y apellidos">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label">DNI/NIE</label>
+                                            <input type="text" class="form-control" name="nosocio_dni" placeholder="12345678A">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label">Teléfono</label>
+                                            <input type="tel" class="form-control" name="nosocio_telf" placeholder="123456789">
+                                        </div>
+                                        <div class="col-md-12 mb-2">
+                                            <label class="form-label">Email</label>
+                                            <input type="email" class="form-control" name="nosocio_email" placeholder="email@ejemplo.com">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <hr>
@@ -2829,30 +2909,52 @@
         }
 
         // Toggle grupo personalizado para Reserva Especial
-        function toggleGrupoPersonalizadoEspecial() {
-            const checkbox = document.getElementById('perteneceGrupoTenerifeEspecial');
-            const container = document.getElementById('grupoPersonalizadoContainerEspecial');
-            const input = document.getElementById('grupoPersonalizadoEspecial');
+        // Función unificada para manejar los tipos de reserva especial
+        function toggleTipoReservaEspecial(tipo) {
+            const gmtCheck = document.getElementById('perteneceGrupoTenerifeEspecial');
+            const socioCheck = document.getElementById('asignarSocioEspecial');
+            const grupoCheck = document.getElementById('otroGrupoEspecial');
+            const noSocioCheck = document.getElementById('asignarNoSocioEspecial');
 
-            if (checkbox.checked) {
-                container.style.display = 'none';
-                input.value = '';
-            } else {
-                container.style.display = 'block';
+            const socioContainer = document.getElementById('socioEspecialContainer');
+            const grupoContainer = document.getElementById('grupoPersonalizadoContainerEspecial');
+            const noSocioContainer = document.getElementById('noSocioEspecialContainer');
+
+            // Desmarcar todos los demás checkboxes excepto el actual
+            if (tipo === 'gmt' && gmtCheck.checked) {
+                socioCheck.checked = false;
+                grupoCheck.checked = false;
+                noSocioCheck.checked = false;
+            } else if (tipo === 'socio' && socioCheck.checked) {
+                gmtCheck.checked = false;
+                grupoCheck.checked = false;
+                noSocioCheck.checked = false;
+            } else if (tipo === 'grupo' && grupoCheck.checked) {
+                gmtCheck.checked = false;
+                socioCheck.checked = false;
+                noSocioCheck.checked = false;
+            } else if (tipo === 'nosocio' && noSocioCheck.checked) {
+                gmtCheck.checked = false;
+                socioCheck.checked = false;
+                grupoCheck.checked = false;
             }
-        }
 
-        // Toggle selector de socio en Reserva Especial
-        function toggleSocioEspecial() {
-            const checkbox = document.getElementById('asignarSocioEspecial');
-            const container = document.getElementById('socioEspecialContainer');
-            const select = document.getElementById('selectSocioEspecial');
+            // Mostrar/ocultar contenedores según el checkbox activo
+            socioContainer.style.display = socioCheck.checked ? 'block' : 'none';
+            grupoContainer.style.display = grupoCheck.checked ? 'block' : 'none';
+            noSocioContainer.style.display = noSocioCheck.checked ? 'block' : 'none';
 
-            if (checkbox.checked) {
-                container.style.display = 'block';
-            } else {
-                container.style.display = 'none';
-                select.value = '';
+            // Limpiar campos cuando se ocultan
+            if (!socioCheck.checked) {
+                document.getElementById('selectSocioEspecial').value = '';
+            }
+            if (!grupoCheck.checked) {
+                document.getElementById('grupoPersonalizadoEspecial').value = '';
+            }
+            if (!noSocioCheck.checked) {
+                document.getElementById('noSocioNombre').value = '';
+                const noSocioFields = noSocioContainer.querySelectorAll('input');
+                noSocioFields.forEach(field => field.value = '');
             }
         }
 
