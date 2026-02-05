@@ -154,8 +154,25 @@
                     throw new Exception("No tienes permiso para editar esta reserva");
                 }
 
-                if ($reserva_actual['estado'] !== 'pendiente') {
-                    throw new Exception("Solo puedes editar reservas pendientes");
+                // Permitir editar reservas pendientes o aprobadas
+                if ($reserva_actual['estado'] !== 'pendiente' && $reserva_actual['estado'] !== 'reservada') {
+                    throw new Exception("Solo puedes editar reservas pendientes o aprobadas");
+                }
+
+                // Si la reserva estaba aprobada y se edita, pasa a pendiente
+                $debe_pasar_a_pendiente = ($reserva_actual['estado'] === 'reservada');
+
+                // Si no se enviaron fechas, usar las fechas actuales de la reserva
+                if (empty($fecha_inicio)) {
+                    $fecha_inicio = $reserva_actual['fecha_inicio'];
+                }
+                if (empty($fecha_fin)) {
+                    $fecha_fin = $reserva_actual['fecha_fin'];
+                }
+
+                // Si no se envió número de camas, usar el actual
+                if ($numero_camas === 0) {
+                    $numero_camas = $reserva_actual['numero_camas'];
                 }
 
                 if ($fecha_inicio > $fecha_fin) {
@@ -199,8 +216,20 @@
                     }
                 }
 
+                // Si la reserva estaba aprobada, cambiarla a pendiente para revisión
+                if ($debe_pasar_a_pendiente) {
+                    $stmt = $conexionPDO->prepare("UPDATE reservas SET estado = 'pendiente' WHERE id = :id");
+                    $stmt->bindParam(':id', $id_reserva, PDO::PARAM_INT);
+                    $stmt->execute();
+                }
+
                 $conexionPDO->commit();
-                $_SESSION['mensaje']      = "Reserva actualizada exitosamente";
+
+                if ($debe_pasar_a_pendiente) {
+                    $_SESSION['mensaje'] = "Reserva actualizada. Ha pasado a estado pendiente para revisión del administrador";
+                } else {
+                    $_SESSION['mensaje'] = "Reserva actualizada exitosamente";
+                }
                 $_SESSION['tipo_mensaje'] = 'success';
                 header('Location: viewSocio.php?accion=mis_reservas');
                 exit;
@@ -607,17 +636,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																																													                                            SELECT r.id, r.estado, h.numero as habitacion,
-																																													                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																																													                                            FROM reservas r
-																																													                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																																													                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																																													                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																																													                                            WHERE r.id_usuario = :id_usuario
-																																													                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																																													                                            AND r.estado IN ('pendiente', 'reservada')
-																																													                                            GROUP BY r.id, r.estado, h.numero
-																																													                                        ");
+																																															                                            SELECT r.id, r.estado, h.numero as habitacion,
+																																															                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																																															                                            FROM reservas r
+																																															                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																																															                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																																															                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																																															                                            WHERE r.id_usuario = :id_usuario
+																																															                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																																															                                            AND r.estado IN ('pendiente', 'reservada')
+																																															                                            GROUP BY r.id, r.estado, h.numero
+																																															                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -625,11 +654,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																																													                                            SELECT COUNT(*) as total
-																																													                                            FROM reservas
-																																													                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																																													                                            AND estado = 'reservada'
-																																													                                        ");
+																																															                                            SELECT COUNT(*) as total
+																																															                                            FROM reservas
+																																															                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																																															                                            AND estado = 'reservada'
+																																															                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();

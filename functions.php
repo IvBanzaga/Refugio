@@ -1198,9 +1198,22 @@
 
         // Búsqueda
         if (! empty($filtros['search'])) {
-            $searchTerm         = '%' . $filtros['search'] . '%';
-            $sql               .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search)";
-            $params[':search']  = $searchTerm;
+            $searchTerm = '%' . $filtros['search'] . '%';
+
+            // Intentar convertir formato DD/MM/YYYY a YYYY-MM-DD para búsqueda de fechas
+            $fechaBusqueda = null;
+            if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $filtros['search'], $matches)) {
+                $fechaBusqueda = sprintf('%04d-%02d-%02d', $matches[3], $matches[2], $matches[1]);
+            }
+
+            if ($fechaBusqueda) {
+                $sql               .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search OR r.fecha_inicio = :fecha OR r.fecha_fin = :fecha)";
+                $params[':search']  = $searchTerm;
+                $params[':fecha']   = $fechaBusqueda;
+            } else {
+                $sql               .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search OR u.email LIKE :search OR u.num_socio LIKE :search OR r.fecha_inicio LIKE :search OR r.fecha_fin LIKE :search)";
+                $params[':search']  = $searchTerm;
+            }
         }
 
         $sql .= " GROUP BY r.id";
@@ -1216,7 +1229,7 @@
             $order_by = 'r.' . $order_by;
         }
 
-        $order_dir  = strtoupper($filtros['order_dir'] ?? '') === 'ASC' ? 'ASC' : 'DESC';
+        $order_dir = strtoupper($filtros['order_dir'] ?? '') === 'ASC' ? 'ASC' : 'DESC';
         $sql       .= " ORDER BY $order_by $order_dir";
 
         // Paginación
