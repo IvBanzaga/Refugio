@@ -8,9 +8,14 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-people-fill"></i> Gestión de Usuarios</h2>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
-        <i class="bi bi-person-plus-fill"></i> Nuevo Usuario
-    </button>
+    <div>
+        <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalImportarCSV">
+            <i class="bi bi-file-earmark-arrow-up"></i> Importar CSV
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
+            <i class="bi bi-person-plus-fill"></i> Nuevo Usuario
+        </button>
+    </div>
 </div>
 
 <div class="card shadow-sm">
@@ -260,6 +265,8 @@
         });
     </script>
 <?php endif; ?>
+
+<?php include VIEWS_PATH . '/partials/modals/modal-importar-csv.php'; ?>
 
 <?php
     $content = ob_get_clean();

@@ -273,6 +273,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ! empty($accion)) {
         $usuarioController->eliminarUsuario();
     } elseif ($accion === 'cambiar_contrasena') {
         $usuarioController->cambiarContrasena();
+    } elseif ($accion === 'importar_usuarios_csv') {
+        $usuarioController->importarUsuariosCSV();
     }
     // Si llegamos aquí, la acción no fue manejada
     exit;

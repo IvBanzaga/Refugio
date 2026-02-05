@@ -429,4 +429,152 @@ class UsuarioController
             redirect('viewSocioMVC.php?accion=perfil');
         }
     }
+
+    /**
+     * Importar usuarios desde archivo CSV
+     */
+    public function importarUsuariosCSV()
+    {
+        try {
+            // Validar archivo
+            if (! isset($_FILES['archivo_csv']) || $_FILES['archivo_csv']['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception('Error al subir el archivo');
+            }
+
+            $file   = $_FILES['archivo_csv']['tmp_name'];
+            $handle = fopen($file, 'r');
+
+            if (! $handle) {
+                throw new Exception('No se pudo leer el archivo');
+            }
+
+            // Obtener mapeo de columnas
+            $mapeo = [
+                'num_socio' => isset($_POST['map_num_socio']) && $_POST['map_num_socio'] !== '' ? (int) $_POST['map_num_socio'] : null,
+                'nombre'    => isset($_POST['map_nombre']) && $_POST['map_nombre'] !== '' ? (int) $_POST['map_nombre'] : null,
+                'apellido1' => isset($_POST['map_apellido1']) && $_POST['map_apellido1'] !== '' ? (int) $_POST['map_apellido1'] : null,
+                'apellido2' => isset($_POST['map_apellido2']) && $_POST['map_apellido2'] !== '' ? (int) $_POST['map_apellido2'] : null,
+                'dni'       => isset($_POST['map_dni']) && $_POST['map_dni'] !== '' ? (int) $_POST['map_dni'] : null,
+                'email'     => isset($_POST['map_email']) && $_POST['map_email'] !== '' ? (int) $_POST['map_email'] : null,
+                'telefono'  => isset($_POST['map_telefono']) && $_POST['map_telefono'] !== '' ? (int) $_POST['map_telefono'] : null,
+            ];
+
+            // Validar campos obligatorios
+            if ($mapeo['num_socio'] === null || $mapeo['nombre'] === null || $mapeo['apellido1'] === null ||
+                $mapeo['dni'] === null || $mapeo['email'] === null) {
+                throw new Exception('Faltan campos obligatorios en el mapeo');
+            }
+
+            // Leer cabecera
+            fgetcsv($handle, 0, ',');
+
+            $importados     = 0;
+            $errores        = 0;
+            $erroresDetalle = [];
+
+            $this->conexion->beginTransaction();
+
+            while (($data = fgetcsv($handle, 0, ',')) !== false) {
+                // Saltar filas vacías
+                if (empty(array_filter($data))) {
+                    continue;
+                }
+
+                try {
+                    // Extraer datos según mapeo
+                    $num_socio = trim($data[$mapeo['num_socio']]);
+                    $nombre    = trim($data[$mapeo['nombre']]);
+                    $apellido1 = trim($data[$mapeo['apellido1']]);
+                    $apellido2 = $mapeo['apellido2'] !== null ? trim($data[$mapeo['apellido2']]) : '';
+                    $dni       = trim($data[$mapeo['dni']]);
+                    $email     = trim($data[$mapeo['email']]);
+                    $telefono  = $mapeo['telefono'] !== null ? trim($data[$mapeo['telefono']]) : '';
+
+                    // Validar campos obligatorios
+                    if (empty($num_socio) || empty($nombre) || empty($apellido1) || empty($dni) || empty($email)) {
+                        $errores++;
+                        $erroresDetalle[] = "Fila con datos incompletos: $nombre $apellido1";
+                        continue;
+                    }
+
+                    // Extraer DNI sin letra para password
+                    $dni_limpio = preg_replace('/[^0-9]/', '', $dni);
+                    if (empty($dni_limpio)) {
+                        $errores++;
+                        $erroresDetalle[] = "DNI inválido para: $nombre $apellido1";
+                        continue;
+                    }
+
+                    // Validar email
+                    if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        $errores++;
+                        $erroresDetalle[] = "Email inválido para: $nombre $apellido1";
+                        continue;
+                    }
+
+                    // Verificar si ya existe el usuario
+                    $stmt_check = $this->conexion->prepare("SELECT id FROM usuarios WHERE email = :email OR num_socio = :num_socio");
+                    $stmt_check->execute([':email' => $email, ':num_socio' => $num_socio]);
+
+                    if ($stmt_check->fetch()) {
+                        $errores++;
+                        $erroresDetalle[] = "Usuario ya existe: $email";
+                        continue;
+                    }
+
+                    // Crear usuario
+                    $password_hash = password_hash($dni_limpio, PASSWORD_BCRYPT);
+
+                    $stmt = $this->conexion->prepare("
+                        INSERT INTO usuarios (num_socio, dni, telf, email, nombre, apellido1, apellido2, password, rol)
+                        VALUES (:num_socio, :dni, :telf, :email, :nombre, :apellido1, :apellido2, :password, 'user')
+                    ");
+
+                    $stmt->execute([
+                        ':num_socio' => $num_socio,
+                        ':dni'       => $dni,
+                        ':telf'      => $telefono,
+                        ':email'     => $email,
+                        ':nombre'    => $nombre,
+                        ':apellido1' => $apellido1,
+                        ':apellido2' => $apellido2,
+                        ':password'  => $password_hash,
+                    ]);
+
+                    $importados++;
+
+                } catch (PDOException $e) {
+                    $errores++;
+                    $erroresDetalle[] = "Error al importar $nombre $apellido1: " . $e->getMessage();
+                }
+            }
+
+            fclose($handle);
+            $this->conexion->commit();
+
+            // Mensaje de resultado
+            $mensaje = "✅ Importación completada: $importados usuarios importados correctamente";
+            if ($errores > 0) {
+                $mensaje .= " | ⚠️ $errores errores encontrados";
+                if (count($erroresDetalle) <= 5) {
+                    $mensaje .= ": " . implode(', ', $erroresDetalle);
+                }
+            }
+
+            $_SESSION['mensaje']      = $mensaje;
+            $_SESSION['tipo_mensaje'] = $importados > 0 ? 'success' : 'warning';
+
+        } catch (Exception $e) {
+            if ($this->conexion->inTransaction()) {
+                $this->conexion->rollBack();
+            }
+            if (isset($handle)) {
+                fclose($handle);
+            }
+            $_SESSION['mensaje']      = "Error al importar usuarios: " . $e->getMessage();
+            $_SESSION['tipo_mensaje'] = 'danger';
+        }
+
+        redirect('viewAdminMVC.php?accion=usuarios');
+    }
 }

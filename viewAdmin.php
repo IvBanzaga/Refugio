@@ -344,6 +344,151 @@
             exit;
             break;
 
+        case 'importar_usuarios_csv':
+            try {
+                // Validar archivo
+                if (! isset($_FILES['archivo_csv']) || $_FILES['archivo_csv']['error'] !== UPLOAD_ERR_OK) {
+                    throw new Exception('Error al subir el archivo');
+                }
+
+                $file   = $_FILES['archivo_csv']['tmp_name'];
+                $handle = fopen($file, 'r');
+
+                if (! $handle) {
+                    throw new Exception('No se pudo leer el archivo');
+                }
+
+                // Obtener mapeo de columnas
+                $mapeo = [
+                    'num_socio' => isset($_POST['map_num_socio']) && $_POST['map_num_socio'] !== '' ? (int) $_POST['map_num_socio'] : null,
+                    'nombre'    => isset($_POST['map_nombre']) && $_POST['map_nombre'] !== '' ? (int) $_POST['map_nombre'] : null,
+                    'apellido1' => isset($_POST['map_apellido1']) && $_POST['map_apellido1'] !== '' ? (int) $_POST['map_apellido1'] : null,
+                    'apellido2' => isset($_POST['map_apellido2']) && $_POST['map_apellido2'] !== '' ? (int) $_POST['map_apellido2'] : null,
+                    'dni'       => isset($_POST['map_dni']) && $_POST['map_dni'] !== '' ? (int) $_POST['map_dni'] : null,
+                    'email'     => isset($_POST['map_email']) && $_POST['map_email'] !== '' ? (int) $_POST['map_email'] : null,
+                    'telefono'  => isset($_POST['map_telefono']) && $_POST['map_telefono'] !== '' ? (int) $_POST['map_telefono'] : null,
+                ];
+
+                // Validar campos obligatorios
+                if ($mapeo['num_socio'] === null || $mapeo['nombre'] === null || $mapeo['apellido1'] === null ||
+                    $mapeo['dni'] === null || $mapeo['email'] === null) {
+                    throw new Exception('Faltan campos obligatorios en el mapeo');
+                }
+
+                // Leer cabecera
+                fgetcsv($handle, 0, ',');
+
+                $importados     = 0;
+                $errores        = 0;
+                $erroresDetalle = [];
+
+                $conexionPDO->beginTransaction();
+
+                while (($data = fgetcsv($handle, 0, ',')) !== false) {
+                    // Saltar filas vacías
+                    if (empty(array_filter($data))) {
+                        continue;
+                    }
+
+                    try {
+                        // Extraer datos según mapeo
+                        $num_socio = trim($data[$mapeo['num_socio']]);
+                        $nombre    = trim($data[$mapeo['nombre']]);
+                        $apellido1 = trim($data[$mapeo['apellido1']]);
+                        $apellido2 = $mapeo['apellido2'] !== null ? trim($data[$mapeo['apellido2']]) : '';
+                        $dni       = trim($data[$mapeo['dni']]);
+                        $email     = trim($data[$mapeo['email']]);
+                        $telefono  = $mapeo['telefono'] !== null ? trim($data[$mapeo['telefono']]) : '';
+
+                        // Validar campos obligatorios
+                        if (empty($num_socio) || empty($nombre) || empty($apellido1) || empty($dni) || empty($email)) {
+                            $errores++;
+                            $erroresDetalle[] = "Fila con datos incompletos: $nombre $apellido1";
+                            continue;
+                        }
+
+                        // Extraer DNI sin letra para password
+                        $dni_limpio = preg_replace('/[^0-9]/', '', $dni);
+                        if (empty($dni_limpio)) {
+                            $errores++;
+                            $erroresDetalle[] = "DNI inválido para: $nombre $apellido1";
+                            continue;
+                        }
+
+                        // Validar email
+                        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                            $errores++;
+                            $erroresDetalle[] = "Email inválido para: $nombre $apellido1";
+                            continue;
+                        }
+
+                        // Verificar si ya existe el usuario
+                        $stmt_check = $conexionPDO->prepare("SELECT id FROM usuarios WHERE email = :email OR num_socio = :num_socio");
+                        $stmt_check->execute([':email' => $email, ':num_socio' => $num_socio]);
+
+                        if ($stmt_check->fetch()) {
+                            $errores++;
+                            $erroresDetalle[] = "Usuario ya existe: $email";
+                            continue;
+                        }
+
+                        // Crear usuario
+                        $password_hash = password_hash($dni_limpio, PASSWORD_BCRYPT);
+
+                        $stmt = $conexionPDO->prepare("
+                            INSERT INTO usuarios (num_socio, dni, telf, email, nombre, apellido1, apellido2, password, rol)
+                            VALUES (:num_socio, :dni, :telf, :email, :nombre, :apellido1, :apellido2, :password, 'user')
+                        ");
+
+                        $stmt->execute([
+                            ':num_socio' => $num_socio,
+                            ':dni'       => $dni,
+                            ':telf'      => $telefono,
+                            ':email'     => $email,
+                            ':nombre'    => $nombre,
+                            ':apellido1' => $apellido1,
+                            ':apellido2' => $apellido2,
+                            ':password'  => $password_hash,
+                        ]);
+
+                        $importados++;
+
+                    } catch (PDOException $e) {
+                        $errores++;
+                        $erroresDetalle[] = "Error al importar $nombre $apellido1: " . $e->getMessage();
+                    }
+                }
+
+                fclose($handle);
+                $conexionPDO->commit();
+
+                // Mensaje de resultado
+                $mensaje = "✅ Importación completada: $importados usuarios importados correctamente";
+                if ($errores > 0) {
+                    $mensaje .= " | ⚠️ $errores errores encontrados";
+                    if (count($erroresDetalle) <= 5) {
+                        $mensaje .= ": " . implode(', ', $erroresDetalle);
+                    }
+                }
+
+                $_SESSION['mensaje']      = $mensaje;
+                $_SESSION['tipo_mensaje'] = $importados > 0 ? 'success' : 'warning';
+
+            } catch (Exception $e) {
+                if (isset($conexionPDO) && $conexionPDO->inTransaction()) {
+                    $conexionPDO->rollBack();
+                }
+                if (isset($handle)) {
+                    fclose($handle);
+                }
+                $_SESSION['mensaje']      = "Error al importar usuarios: " . $e->getMessage();
+                $_SESSION['tipo_mensaje'] = 'danger';
+            }
+
+            header('Location: viewAdmin.php?accion=usuarios');
+            exit;
+            break;
+
         case 'aprobar_reserva':
             $id = (int) $_POST['id'];
             if (actualizar_estado_reserva($conexionPDO, $id, 'reservada')) {
@@ -1532,9 +1677,14 @@
                     <!-- Gestión de Usuarios -->
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h2><i class="bi bi-people-fill"></i> Gestión de Usuarios</h2>
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
-                            <i class="bi bi-person-plus-fill"></i> Nuevo Usuario
-                        </button>
+                        <div>
+                            <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalImportarCSV">
+                                <i class="bi bi-file-earmark-arrow-up"></i> Importar CSV
+                            </button>
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
+                                <i class="bi bi-person-plus-fill"></i> Nuevo Usuario
+                            </button>
+                        </div>
                     </div>
 
                     <div class="card shadow-sm">
@@ -1745,6 +1895,225 @@
                             });
                         </script>
                     <?php endif; ?>
+
+                    <!-- Modal Importar CSV -->
+                    <div class="modal fade" id="modalImportarCSV" tabindex="-1">
+                        <div class="modal-dialog modal-xl">
+                            <div class="modal-content">
+                                <div class="modal-header bg-success text-white">
+                                    <h5 class="modal-title">
+                                        <i class="bi bi-file-earmark-arrow-up"></i> Importar Usuarios desde CSV
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form method="post" enctype="multipart/form-data" id="formImportarCSV">
+                                    <input type="hidden" name="accion" value="importar_usuarios_csv">
+                                    <div class="modal-body">
+                                        <!-- Paso 1: Subir archivo -->
+                                        <div id="paso1" class="import-step">
+                                            <div class="alert alert-info">
+                                                <i class="bi bi-info-circle"></i>
+                                                <strong>Instrucciones:</strong>
+                                                Selecciona un archivo CSV con los datos de los usuarios.
+                                                El archivo debe contener las siguientes columnas:
+                                                <strong>Número de Socio, Nombre, Apellido1, Apellido2, DNI, Email, Teléfono</strong>
+                                                <br><small class="mt-2 d-block">
+                                                • Los usuarios importados tendrán rol "user" por defecto<br>
+                                                • La contraseña será el DNI sin letra<br>
+                                                • Podrás mapear las columnas si tienen nombres diferentes
+                                                </small>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label">Archivo CSV *</label>
+                                                <input type="file" class="form-control" name="archivo_csv" id="archivoCsv"
+                                                       accept=".csv" required onchange="procesarCSV(this)">
+                                            </div>
+                                        </div>
+
+                                        <!-- Paso 2: Mapear columnas -->
+                                        <div id="paso2" class="import-step" style="display: none;">
+                                            <div class="alert alert-warning">
+                                                <i class="bi bi-exclamation-triangle"></i>
+                                                <strong>Mapeo de Columnas:</strong>
+                                                Asigna cada columna del CSV al campo correspondiente del sistema
+                                            </div>
+
+                                            <div class="table-responsive">
+                                                <table class="table table-bordered">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Campo del Sistema</th>
+                                                            <th>Columna del CSV</th>
+                                                            <th>Vista Previa</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="mapeoColumnas">
+                                                        <tr>
+                                                            <td><strong>Número de Socio *</strong></td>
+                                                            <td><select name="map_num_socio" class="form-select" id="map_num_socio" required></select></td>
+                                                            <td><span id="prev_num_socio" class="text-muted">-</span></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td><strong>Nombre *</strong></td>
+                                                            <td><select name="map_nombre" class="form-select" id="map_nombre" required></select></td>
+                                                            <td><span id="prev_nombre" class="text-muted">-</span></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td><strong>Apellido 1 *</strong></td>
+                                                            <td><select name="map_apellido1" class="form-select" id="map_apellido1" required></select></td>
+                                                            <td><span id="prev_apellido1" class="text-muted">-</span></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td><strong>Apellido 2</strong></td>
+                                                            <td><select name="map_apellido2" class="form-select" id="map_apellido2"></select></td>
+                                                            <td><span id="prev_apellido2" class="text-muted">-</span></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td><strong>DNI *</strong></td>
+                                                            <td><select name="map_dni" class="form-select" id="map_dni" required></select></td>
+                                                            <td><span id="prev_dni" class="text-muted">-</span></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td><strong>Email *</strong></td>
+                                                            <td><select name="map_email" class="form-select" id="map_email" required></select></td>
+                                                            <td><span id="prev_email" class="text-muted">-</span></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td><strong>Teléfono</strong></td>
+                                                            <td><select name="map_telefono" class="form-select" id="map_telefono"></select></td>
+                                                            <td><span id="prev_telefono" class="text-muted">-</span></td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div class="alert alert-secondary">
+                                                <strong>Total de registros a importar:</strong> <span id="totalRegistros">0</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-secondary" id="btnVolver" style="display: none;" onclick="volverPaso1()">
+                                            <i class="bi bi-arrow-left"></i> Volver
+                                        </button>
+                                        <button type="submit" class="btn btn-success" id="btnImportar" style="display: none;">
+                                            <i class="bi bi-check-circle"></i> Importar Usuarios
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <script>
+                    let csvData = [];
+                    let csvHeaders = [];
+
+                    function procesarCSV(input) {
+                        const file = input.files[0];
+                        if (!file) return;
+
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const text = e.target.result;
+                            const lines = text.split('\n').filter(line => line.trim());
+
+                            if (lines.length < 2) {
+                                alert('El archivo CSV debe contener al menos una cabecera y una fila de datos');
+                                input.value = '';
+                                return;
+                            }
+
+                            // Parsear CSV (simple, sin comillas complejas)
+                            csvHeaders = lines[0].split(/[,;]/).map(h => h.trim().replace(/^"|"$/g, ''));
+                            csvData = [];
+
+                            for (let i = 1; i < lines.length; i++) {
+                                const row = lines[i].split(/[,;]/).map(cell => cell.trim().replace(/^"|"$/g, ''));
+                                if (row.length === csvHeaders.length && row.some(cell => cell)) {
+                                    csvData.push(row);
+                                }
+                            }
+
+                            if (csvData.length === 0) {
+                                alert('No se encontraron datos válidos en el archivo CSV');
+                                input.value = '';
+                                return;
+                            }
+
+                            // Mostrar paso 2 y llenar los selects
+                            document.getElementById('paso1').style.display = 'none';
+                            document.getElementById('paso2').style.display = 'block';
+                            document.getElementById('btnVolver').style.display = 'inline-block';
+                            document.getElementById('btnImportar').style.display = 'inline-block';
+                            document.getElementById('totalRegistros').textContent = csvData.length;
+
+                            // Llenar selects de mapeo
+                            const selects = ['map_num_socio', 'map_nombre', 'map_apellido1', 'map_apellido2', 'map_dni', 'map_email', 'map_telefono'];
+                            selects.forEach(selectId => {
+                                const select = document.getElementById(selectId);
+                                select.innerHTML = '<option value="">-- Sin asignar --</option>';
+                                csvHeaders.forEach((header, index) => {
+                                    const option = document.createElement('option');
+                                    option.value = index;
+                                    option.textContent = header;
+                                    select.appendChild(option);
+                                });
+
+                                // Auto-mapeo inteligente
+                                const fieldName = selectId.replace('map_', '').toLowerCase();
+                                const matchIndex = csvHeaders.findIndex(h => {
+                                    const headerLower = h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                                    return headerLower.includes(fieldName) ||
+                                           (fieldName === 'num_socio' && (headerLower.includes('socio') || headerLower.includes('numero'))) ||
+                                           (fieldName === 'apellido1' && headerLower.includes('apellido1')) ||
+                                           (fieldName === 'apellido2' && headerLower.includes('apellido2')) ||
+                                           (fieldName === 'telefono' && (headerLower.includes('telefono') || headerLower.includes('telf')));
+                                });
+
+                                if (matchIndex !== -1) {
+                                    select.value = matchIndex;
+                                    actualizarVistaPrevia(selectId, matchIndex);
+                                }
+
+                                // Event listener para vista previa
+                                select.addEventListener('change', function() {
+                                    actualizarVistaPrevia(selectId, this.value);
+                                });
+                            });
+                        };
+                        reader.readAsText(file);
+                    }
+
+                    function actualizarVistaPrevia(selectId, columnIndex) {
+                        const field = selectId.replace('map_', '');
+                        const prevSpan = document.getElementById('prev_' + field);
+                        if (columnIndex !== '' && csvData.length > 0) {
+                            prevSpan.textContent = csvData[0][columnIndex] || '-';
+                            prevSpan.className = 'text-success fw-bold';
+                        } else {
+                            prevSpan.textContent = '-';
+                            prevSpan.className = 'text-muted';
+                        }
+                    }
+
+                    function volverPaso1() {
+                        document.getElementById('paso1').style.display = 'block';
+                        document.getElementById('paso2').style.display = 'none';
+                        document.getElementById('btnVolver').style.display = 'none';
+                        document.getElementById('btnImportar').style.display = 'none';
+                    }
+
+                    // Reset al cerrar modal
+                    document.getElementById('modalImportarCSV').addEventListener('hidden.bs.modal', function() {
+                        document.getElementById('formImportarCSV').reset();
+                        volverPaso1();
+                        csvData = [];
+                        csvHeaders = [];
+                    });
+                    </script>
 
                 <?php elseif ($accion === 'reservas'): ?>
                     <!-- Gestión de Reservas -->
