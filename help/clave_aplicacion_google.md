@@ -8,7 +8,7 @@ Esta guía explica cómo obtener la **Contraseña de Aplicación** de Google nec
 
 Es una contraseña especial de 16 caracteres que Google genera para aplicaciones o dispositivos que no soportan la verificación en 2 pasos. Permite que tu aplicación se conecte de forma segura a Gmail sin usar tu contraseña real.
 
-**Ejemplo de formato:** `moto ohdq fxxp zmdj`
+**Ejemplo de formato:** `xxxx xxxx xxxx xxxx`
 
 ---
 
