@@ -42,6 +42,25 @@
                     throw new Exception("Debes reservar al menos 1 cama");
                 }
 
+                // Validar fechas
+                $fecha_inicio = $_POST['fecha_inicio'] ?? '';
+                $fecha_fin    = $_POST['fecha_fin'] ?? '';
+
+                if (empty($fecha_inicio) || empty($fecha_fin)) {
+                    throw new Exception("Debes especificar fechas de entrada y salida");
+                }
+
+                // Calcular número de días (diferencia entre fechas)
+                $inicio     = new DateTime($fecha_inicio);
+                $fin        = new DateTime($fecha_fin);
+                $diferencia = $inicio->diff($fin);
+                $dias       = $diferencia->days;
+
+                // Validar máximo 2 noches (3 días: entrada, día intermedio, salida)
+                if ($dias > 2) {
+                    throw new Exception("Las reservas están limitadas a un máximo de 2 noches (3 días consecutivos). Por ejemplo: entrada día 3, salida día 5.");
+                }
+
                 $acompanantes = $_POST['acompanantes'] ?? [];
                 if (! is_array($acompanantes)) {
                     $acompanantes = [];
@@ -58,6 +77,8 @@
                     'id_usuario'    => $_SESSION['userId'],
                     'id_habitacion' => 1,
                     'numero_camas'  => $numero_camas,
+                    'fecha_inicio'  => $fecha_inicio,
+                    'fecha_fin'     => $fecha_fin,
                     'fecha_inicio'  => $_POST['fecha_inicio'] ?? '',
                     'fecha_fin'     => $_POST['fecha_fin'] ?? '',
                     'actividad'     => $_POST['actividad'] ?? '',
@@ -173,6 +194,16 @@
                 // Si no se envió número de camas, usar el actual
                 if ($numero_camas === 0) {
                     $numero_camas = $reserva_actual['numero_camas'];
+                }
+
+                // Validar máximo 2 noches (3 días)
+                $inicio     = new DateTime($fecha_inicio);
+                $fin        = new DateTime($fecha_fin);
+                $diferencia = $inicio->diff($fin);
+                $dias       = $diferencia->days;
+
+                if ($dias > 2) {
+                    throw new Exception("Las reservas están limitadas a un máximo de 2 noches (3 días consecutivos)");
                 }
 
                 if ($fecha_inicio > $fecha_fin) {
@@ -636,17 +667,17 @@
 
                                         // Verificar si el usuario tiene reserva en esta fecha
                                         $stmt_mis_reservas = $conexionPDO->prepare("
-																																															                                            SELECT r.id, r.estado, h.numero as habitacion,
-																																															                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
-																																															                                            FROM reservas r
-																																															                                            JOIN habitaciones h ON r.id_habitacion = h.id
-																																															                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
-																																															                                            LEFT JOIN camas c ON rc.id_cama = c.id
-																																															                                            WHERE r.id_usuario = :id_usuario
-																																															                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
-																																															                                            AND r.estado IN ('pendiente', 'reservada')
-																																															                                            GROUP BY r.id, r.estado, h.numero
-																																															                                        ");
+																																																																	                                            SELECT r.id, r.estado, h.numero as habitacion,
+																																																																	                                                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+																																																																	                                            FROM reservas r
+																																																																	                                            JOIN habitaciones h ON r.id_habitacion = h.id
+																																																																	                                            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+																																																																	                                            LEFT JOIN camas c ON rc.id_cama = c.id
+																																																																	                                            WHERE r.id_usuario = :id_usuario
+																																																																	                                            AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+																																																																	                                            AND r.estado IN ('pendiente', 'reservada')
+																																																																	                                            GROUP BY r.id, r.estado, h.numero
+																																																																	                                        ");
                                         $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
                                         $stmt_mis_reservas->bindParam(':fecha', $fecha);
                                         $stmt_mis_reservas->execute();
@@ -654,11 +685,11 @@
 
                                         // Contar total de reservas aprobadas en esta fecha
                                         $stmt_total_reservas = $conexionPDO->prepare("
-																																															                                            SELECT COUNT(*) as total
-																																															                                            FROM reservas
-																																															                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
-																																															                                            AND estado = 'reservada'
-																																															                                        ");
+																																																																	                                            SELECT COUNT(*) as total
+																																																																	                                            FROM reservas
+																																																																	                                            WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+																																																																	                                            AND estado = 'reservada'
+																																																																	                                        ");
                                         $stmt_total_reservas->bindParam(':fecha', $fecha);
                                         $stmt_total_reservas->execute();
                                         $total_reservas_aprobadas = $stmt_total_reservas->fetchColumn();
@@ -823,24 +854,33 @@
                         </div>
                         <div class="card-body">
                             <?php if (count($pendientes) > 0): ?>
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> Puedes editar fecha y acompañantes o anular tus reservas.
+                                </div>
                                 <div class="table-responsive">
-                                    <table class="table table-hover">
+                                    <table class="table table-hover" id="tablaPendientes">
                                         <thead>
                                             <tr>
                                                 <th>Nº Camas</th>
-                                                <th>Fecha Entrada</th>
-                                                <th>Fecha Salida</th>
-                                                <th>Solicitado</th>
+                                                <th class="sortable" onclick="sortTable('tablaPendientes', 1)" style="cursor: pointer;">Fecha Entrada <i class="bi bi-arrow-down-up"></i></th>
+                                                <th class="sortable" onclick="sortTable('tablaPendientes', 2)" style="cursor: pointer;">Fecha Salida <i class="bi bi-arrow-down-up"></i></th>
+                                                <th>Motivo</th>
+                                                <th>Días</th>
+                                                <th class="sortable" onclick="sortTable('tablaPendientes', 5)" style="cursor: pointer;">Solicitado <i class="bi bi-arrow-down-up"></i></th>
                                                 <th>Acciones</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <?php foreach ($pendientes as $reserva): ?>
+                                            <?php foreach ($pendientes as $reserva):
+                                                    $dias = (strtotime($reserva['fecha_fin']) - strtotime($reserva['fecha_inicio'])) / 86400;
+                                            ?>
                                                 <tr>
                                                     <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
-                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
-                                                    <td><?php echo date('d/m/Y H:i', strtotime($reserva['fecha_creacion'])) ?></td>
+                                                    <td data-sort="<?php echo $reserva['fecha_inicio'] ?>"><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+                                                    <td data-sort="<?php echo $reserva['fecha_fin'] ?>"><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+                                                    <td><?php echo htmlspecialchars($reserva['observaciones'] ?? 'Sin especificar') ?></td>
+                                                    <td><?php echo $dias ?> día<?php echo $dias > 1 ? 's' : '' ?></td>
+                                                    <td data-sort="<?php echo strtotime($reserva['fecha_creacion']) ?>"><?php echo date('d/m/Y H:i', strtotime($reserva['fecha_creacion'])) ?></td>
                                                     <td>
                                                         <button type="button" class="btn btn-sm btn-primary me-1"
                                                             onclick="editarReservaUsuario(<?php echo htmlspecialchars(json_encode($reserva)) ?>)">
@@ -874,16 +914,18 @@
                         <div class="card-body">
                             <?php if (count($aprobadas) > 0): ?>
                                 <div class="alert alert-info">
-                                    <i class="bi bi-info-circle"></i> Puedes editar o anular tus reservas aprobadas que aún no han comenzado. La anulación no se puede deshacer.
+                                    <i class="bi bi-info-circle"></i> Puedes editar el número de acompañantes y la reserva pasará a pendiente o anular tus reservas aprobadas que aún no han comenzado. La anulación no se puede deshacer.
                                 </div>
                                 <div class="table-responsive">
-                                    <table class="table table-hover">
+                                    <table class="table table-hover" id="tablaAprobadas">
                                         <thead>
                                             <tr>
                                                 <th>Nº Camas</th>
-                                                <th>Fecha Entrada</th>
-                                                <th>Fecha Salida</th>
+                                                <th class="sortable" onclick="sortTable('tablaAprobadas', 1)" style="cursor: pointer;">Fecha Entrada <i class="bi bi-arrow-down-up"></i></th>
+                                                <th class="sortable" onclick="sortTable('tablaAprobadas', 2)" style="cursor: pointer;">Fecha Salida <i class="bi bi-arrow-down-up"></i></th>
+                                                <th>Motivo</th>
                                                 <th>Días</th>
+                                                <th class="sortable" onclick="sortTable('tablaAprobadas', 5)" style="cursor: pointer;">Solicitado <i class="bi bi-arrow-down-up"></i></th>
                                                 <th>Acciones</th>
                                             </tr>
                                         </thead>
@@ -894,9 +936,11 @@
                                             ?>
 					                                                <tr>
 					                                                    <td><?php echo $reserva['numero_camas'] ?> cama(s)</td>
-					                                                    <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
-					                                                    <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+					                                                    <td data-sort="<?php echo $reserva['fecha_inicio'] ?>"><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
+					                                                    <td data-sort="<?php echo $reserva['fecha_fin'] ?>"><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
+					                                                    <td><?php echo htmlspecialchars($reserva['observaciones'] ?? 'Sin especificar') ?></td>
 					                                                    <td><?php echo $dias ?> día<?php echo $dias > 1 ? 's' : '' ?></td>
+					                                                    <td data-sort="<?php echo strtotime($reserva['fecha_creacion']) ?>"><?php echo date('d/m/Y H:i', strtotime($reserva['fecha_creacion'])) ?></td>
 					                                                    <td>
 					                                                        <?php if ($puede_editar): ?>
 					                                                            <button type="button" class="btn btn-sm btn-primary me-1"
@@ -1347,7 +1391,7 @@
         // Inicializar Flatpickr para fechas con días completos en rojo
         window.addEventListener('DOMContentLoaded', function() {
             // Cargar fechas completas
-            fetch('fechas_completas.php')
+            fetch('api/fechas_completas.php')
                 .then(response => response.json())
                 .then(data => {
                     if (data.exito) {
@@ -1479,8 +1523,32 @@
                     return;
                 }
 
+                // Calcular número de días
+                const inicio = new Date(fechaInicio);
+                const fin = new Date(fechaFin);
+                const diferenciaTiempo = fin.getTime() - inicio.getTime();
+                const diferenciaDias = diferenciaTiempo / (1000 * 3600 * 24);
+
+                // Validar máximo 2 noches (3 días)
+                if (diferenciaDias > 2) {
+                    const infoEl = document.getElementById('infoAcompanantes');
+                    infoEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Las reservas están limitadas a un máximo de 2 noches (3 días consecutivos). Por ejemplo: entrada día 3, salida día 5.';
+                    infoEl.className = 'text-danger mt-2 d-block fw-bold';
+
+                    // Deshabilitar botones
+                    document.getElementById('btnIncrementar').disabled = true;
+                    document.getElementById('btnDecrementar').disabled = true;
+
+                    // Limpiar número de camas
+                    document.getElementById('displayNumeroCamas').value = '1';
+                    document.getElementById('hiddenNumCamas').value = '1';
+                    numeroCamasActual = 1;
+
+                    return;
+                }
+
                 // Obtener total de camas disponibles
-                fetch(`disponibilidad_total.php?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
+                fetch(`api/disponibilidad_total.php?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
                     .then(response => response.json())
                     .then(data => {
                         camasDisponiblesMax = data.disponibles || 0;
@@ -1970,7 +2038,116 @@
             // Redirigir a nueva reserva con fechas
             window.location.href = `viewSocio.php?accion=nueva_reserva&fecha_inicio=${fecha}&fecha_fin=${fechaSalida}`;
         }
+
+        // Función para ordenar tablas
+        let sortDirections = {}; // Almacenar dirección de ordenamiento por tabla y columna
+
+        function sortTable(tableId, columnIndex) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            // Determinar dirección de ordenamiento
+            const key = `${tableId}-${columnIndex}`;
+            if (!sortDirections[key]) {
+                sortDirections[key] = 'asc'; // Por defecto ascendente (más antigua a más reciente)
+            } else {
+                sortDirections[key] = sortDirections[key] === 'asc' ? 'desc' : 'asc';
+            }
+            const isAscending = sortDirections[key] === 'asc';
+
+            // Ordenar filas
+            rows.sort((a, b) => {
+                const cellA = a.cells[columnIndex];
+                const cellB = b.cells[columnIndex];
+
+                if (!cellA || !cellB) return 0;
+
+                // Usar data-sort si está disponible (para fechas), sino usar textContent
+                let valueA = cellA.getAttribute('data-sort') || cellA.textContent.trim();
+                let valueB = cellB.getAttribute('data-sort') || cellB.textContent.trim();
+
+                let numA, numB;
+
+                // Verificar primero si es una fecha en formato YYYY-MM-DD
+                const dateMatchA = valueA.match(/^\d{4}-\d{2}-\d{2}$/);
+                const dateMatchB = valueB.match(/^\d{4}-\d{2}-\d{2}$/);
+
+                if (dateMatchA) {
+                    numA = new Date(valueA + 'T00:00:00').getTime();
+                } else {
+                    numA = parseFloat(valueA);
+                }
+
+                if (dateMatchB) {
+                    numB = new Date(valueB + 'T00:00:00').getTime();
+                } else {
+                    numB = parseFloat(valueB);
+                }
+
+                // Comparar como números si ambos son válidos
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return isAscending ? numA - numB : numB - numA;
+                } else {
+                    // Comparar como strings
+                    return isAscending
+                        ? valueA.localeCompare(valueB)
+                        : valueB.localeCompare(valueA);
+                }
+            });
+
+            // Reordenar filas en el DOM
+            rows.forEach(row => tbody.appendChild(row));
+
+            // Actualizar iconos de ordenamiento
+            const headers = table.querySelectorAll('th');
+            headers.forEach((th, idx) => {
+                const icon = th.querySelector('i');
+                if (icon && th.classList.contains('sortable')) {
+                    if (idx === columnIndex) {
+                        icon.className = isAscending ? 'bi bi-arrow-up' : 'bi bi-arrow-down';
+                    } else {
+                        icon.className = 'bi bi-arrow-down-up';
+                    }
+                }
+            });
+        }
+
+        // Ordenar por defecto por fecha de entrada (más antigua a más reciente) al cargar
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('tablaPendientes')) {
+                sortTable('tablaPendientes', 1); // Ordenar por fecha entrada
+            }
+            if (document.getElementById('tablaAprobadas')) {
+                sortTable('tablaAprobadas', 1); // Ordenar por fecha entrada
+            }
+        });
     </script>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4 mt-0">
+        <div class="container">
+            <div class="text-center">
+                <p class="mb-1 fw-light">Sistema de Reservas - Refugio de Montaña</p>
+                <p class="mb-3 small" style="color: #adb5bd;">
+                    Desarrollado por <a href="https://ivandevs.netlify.app" target="_blank" class="text-info text-decoration-none fw-semibold">Iván Bazaga</a>
+                </p>
+                <div class="d-flex justify-content-center gap-4">
+                    <a href="mailto:ivan.cpweb@gmail.com" class="text-info text-decoration-none" title="Email">
+                        <i class="bi bi-envelope fs-4"></i>
+                    </a>
+                    <a href="https://github.com/IvBanzaga" target="_blank" class="text-info text-decoration-none" title="GitHub">
+                        <i class="bi bi-github fs-4"></i>
+                    </a>
+                    <a href="https://www.linkedin.com/in/ivan-bazaga" target="_blank" class="text-info text-decoration-none" title="LinkedIn">
+                        <i class="bi bi-linkedin fs-4"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
 </body>
 
 </html>

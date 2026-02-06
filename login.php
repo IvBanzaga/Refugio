@@ -99,51 +99,93 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <style>
+        html, body {
+            height: 100%;
+        }
         body {
             background-color: #f5f5f5;
-            padding-top: 40px;
-            padding-bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .content-wrapper {
+            flex: 1 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 15px;
         }
         .form-signin {
             max-width: 400px;
-            padding: 15px;
-            margin: 0 auto;
+            width: 100%;
         }
         .card {
             border-radius: 10px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+        footer {
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
-    <div class="form-signin">
-        <div class="card">
-            <div class="card-body p-4">
-                <h3 class="text-center mb-4">🏔️ Refugio de Montaña</h3>
+    <div class="content-wrapper">
+        <div class="form-signin">
+            <div class="card">
+                <div class="card-body p-4">
+                    <h3 class="text-center mb-4">🏔️ Refugio de Montaña</h3>
 
-                <?php if ($error): ?>
-                    <div class="alert alert-danger"><?php echo htmlspecialchars($error) ?></div>
-                <?php endif; ?>
+                    <?php if ($error): ?>
+                        <div class="alert alert-danger"><?php echo htmlspecialchars($error) ?></div>
+                    <?php endif; ?>
 
-                <form method="POST" action="login.php">
-                    <div class="mb-3">
-                        <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-control" required autofocus>
-                    </div>
+                    <form method="POST" action="login.php">
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" name="email" class="form-control" required autofocus>
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Contraseña</label>
-                        <input type="password" name="password" class="form-control" required>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label">Contraseña</label>
+                            <input type="password" name="password" class="form-control" required>
+                        </div>
 
-                    <div class="d-flex justify-content-center mb-3">
-                        <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
-                    </div>
+                        <div class="d-flex justify-content-center mb-3">
+                            <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
+                        </div>
 
-                    <button type="submit" class="btn btn-primary w-100">Iniciar Sesión</button>
-                </form>
+                        <button type="submit" class="btn btn-primary w-100">Iniciar Sesión</button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4">
+        <div class="container">
+            <div class="text-center">
+                <p class="mb-1 fw-light">Sistema de Reservas - Refugio de Montaña</p>
+                <p class="mb-3 small" style="color: #adb5bd;">
+                    Desarrollado por <a href="https://ivandevs.netlify.app" target="_blank" class="text-info text-decoration-none fw-semibold">Iván Bazaga</a>
+                </p>
+                <div class="d-flex justify-content-center gap-4">
+                    <a href="mailto:ivan.cpweb@gmail.com" class="text-info text-decoration-none" title="Email">
+                        <i class="bi bi-envelope fs-4"></i>
+                    </a>
+                    <a href="https://github.com/IvBanzaga" target="_blank" class="text-info text-decoration-none" title="GitHub">
+                        <i class="bi bi-github fs-4"></i>
+                    </a>
+                    <a href="https://www.linkedin.com/in/ivan-bazaga" target="_blank" class="text-info text-decoration-none" title="LinkedIn">
+                        <i class="bi bi-linkedin fs-4"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
 </body>
 </html>

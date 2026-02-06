@@ -235,6 +235,56 @@
     // La función export_usuarios_pdf hace exit, nunca llegará aquí
     }
 
+    // AJAX: Obtener detalles de reserva
+    if ($accion === 'obtener_detalles_reserva' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    header('Content-Type: application/json');
+
+    $id_reserva = $_GET['id'] ?? 0;
+
+    if (! $id_reserva) {
+        echo json_encode(['error' => 'ID de reserva requerido']);
+        exit;
+    }
+
+    try {
+        // Obtener datos de la reserva y usuario
+        $stmt = $conexionPDO->prepare("
+            SELECT r.*, u.nombre, u.apellido1, u.apellido2, u.email, u.telf, u.dni
+            FROM reservas r
+            LEFT JOIN usuarios u ON r.id_usuario = u.id
+            WHERE r.id = :id
+        ");
+        $stmt->bindParam(':id', $id_reserva, PDO::PARAM_INT);
+        $stmt->execute();
+        $reserva = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (! $reserva) {
+            echo json_encode(['error' => 'Reserva no encontrada']);
+            exit;
+        }
+
+        // Obtener acompañantes
+        $stmt = $conexionPDO->prepare("
+            SELECT * FROM acompanantes WHERE id_reserva = :id_reserva
+        ");
+        $stmt->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+        $stmt->execute();
+        $acompanantes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $reserva['acompanantes'] = $acompanantes;
+
+        // Formatear fechas
+        $reserva['fecha_inicio'] = date('d/m/Y', strtotime($reserva['fecha_inicio']));
+        $reserva['fecha_fin']    = date('d/m/Y', strtotime($reserva['fecha_fin']));
+
+        echo json_encode($reserva);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['error' => 'Error al obtener detalles: ' . $e->getMessage()]);
+        exit;
+    }
+    }
+
     // AJAX: Verificar disponibilidad de camas
     if (isset($_GET['ajax']) && $_GET['ajax'] === 'verificar_disponibilidad') {
     header('Content-Type: application/json');
@@ -868,10 +918,28 @@
                     }
 
                     // Obtener nombre del socio
-                    $stmt = $conexionPDO->prepare("SELECT nombre, apellido1 FROM usuarios WHERE id = :id");
+                    $stmt = $conexionPDO->prepare("SELECT nombre, apellido1, email FROM usuarios WHERE id = :id");
                     $stmt->bindParam(':id', $id_usuario, PDO::PARAM_INT);
                     $stmt->execute();
                     $socio = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                    // Enviar email al socio con la información de la reserva
+                    try {
+                        require_once __DIR__ . '/api/email_notificaciones.php';
+
+                        $datosReservaEmail = [
+                            'id'           => $id_reserva,
+                            'fecha_inicio' => $fecha_inicio,
+                            'fecha_fin'    => $fecha_fin,
+                            'numero_camas' => $numero_camas,
+                            'actividad'    => $datos_reserva['actividad'],
+                        ];
+
+                        // Enviar notificación de reserva aprobada al socio
+                        notificar_socio_reserva_aprobada($datosReservaEmail, $socio);
+                    } catch (Exception $emailError) {
+                        error_log("Error al enviar email al socio: " . $emailError->getMessage());
+                    }
 
                     $_SESSION['mensaje']      = "Reserva creada y aprobada automáticamente para {$socio['nombre']} {$socio['apellido1']}";
                     $_SESSION['tipo_mensaje'] = 'success';
@@ -2230,6 +2298,16 @@
                                                         <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                         <td>
+                                                            <button type="button" class="btn btn-sm btn-info"
+                                                                    onclick="verDetallesReserva(<?php echo $reserva['id'] ?>)"
+                                                                    title="Ver detalles">
+                                                                <i class="bi bi-eye"></i>
+                                                            </button>
+                                                            <button type="button" class="btn btn-sm btn-warning"
+                                                                    onclick='editarReserva(<?php echo json_encode($reserva) ?>)'
+                                                                    title="Editar">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
                                                             <form method="post" class="d-inline">
                                                                 <input type="hidden" name="accion" value="aprobar_reserva">
                                                                 <input type="hidden" name="id" value="<?php echo $reserva['id'] ?>">
@@ -2348,6 +2426,11 @@
                                                         <td><?php echo formatear_fecha($reserva['fecha_inicio']) ?></td>
                                                         <td><?php echo formatear_fecha($reserva['fecha_fin']) ?></td>
                                                         <td>
+                                                            <button type="button" class="btn btn-sm btn-info"
+                                                                    onclick="verDetallesReserva(<?php echo $reserva['id'] ?>)"
+                                                                    title="Ver detalles">
+                                                                <i class="bi bi-eye"></i>
+                                                            </button>
                                                             <button class="btn btn-sm btn-warning" onclick='editarReserva(<?php echo json_encode($reserva) ?>)' title="Editar">
                                                                 <i class="bi bi-pencil"></i>
                                                             </button>
@@ -3692,6 +3775,30 @@
         </div>
     </div>
 
+    <!-- Modal para Ver/Editar Detalles de Reserva Pendiente -->
+    <div class="modal fade" id="modalDetallesReserva" tabindex="-1" aria-labelledby="modalDetallesReservaLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title" id="modalDetallesReservaLabel">
+                        <i class="bi bi-info-circle"></i> Detalles de la Reserva
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="detallesReservaBody">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Cargando...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Variables para el modal de editar
         let maxCamasEditar = 26; // Capacidad de habitación 1
@@ -4009,7 +4116,137 @@
             console.log('Modal No Socio existe:', modalNoSocio !== null);
             console.log('Modal Especial existe:', modalEspecial !== null);
         });
+
+        // Función para ver detalles de reserva
+        function verDetallesReserva(idReserva) {
+            const modal = new bootstrap.Modal(document.getElementById('modalDetallesReserva'));
+            const modalBody = document.getElementById('detallesReservaBody');
+
+            // Mostrar spinner
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+            `;
+
+            modal.show();
+
+            // Obtener detalles de la reserva
+            fetch('?accion=obtener_detalles_reserva&id=' + idReserva)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        modalBody.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+
+                    // Construir HTML con los detalles
+                    let html = `
+                        <h6 class="border-bottom pb-2 mb-3"><i class="bi bi-person"></i> Datos del Solicitante</h6>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <strong>Nombre:</strong> ${data.nombre} ${data.apellido1} ${data.apellido2 || ''}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Email:</strong> ${data.email}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <strong>Teléfono:</strong> ${data.telf}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>DNI:</strong> ${data.dni || 'No especificado'}
+                            </div>
+                        </div>
+
+                        <h6 class="border-bottom pb-2 mb-3 mt-4"><i class="bi bi-calendar"></i> Datos de la Reserva</h6>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <strong>Entrada:</strong> ${data.fecha_inicio}
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Salida:</strong> ${data.fecha_fin}
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Camas:</strong> ${data.numero_camas}
+                            </div>
+                        </div>
+                    `;
+
+                    // Agregar acompañantes si existen
+                    if (data.acompanantes && data.acompanantes.length > 0) {
+                        html += `
+                            <h6 class="border-bottom pb-2 mb-3 mt-4"><i class="bi bi-people"></i> Acompañantes</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Nombre</th>
+                                            <th>DNI</th>
+                                            <th>Socio</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                        `;
+
+                        data.acompanantes.forEach(acomp => {
+                            html += `
+                                <tr>
+                                    <td>${acomp.nombre} ${acomp.apellido1} ${acomp.apellido2 || ''}</td>
+                                    <td>${acomp.dni}</td>
+                                    <td>${acomp.es_socio ? '<span class="badge bg-success">Sí - #' + acomp.num_socio + '</span>' : '<span class="badge bg-secondary">No</span>'}</td>
+                                </tr>
+                            `;
+                        });
+
+                        html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    }
+
+                    // Agregar observaciones si existen
+                    if (data.observaciones) {
+                        html += `
+                            <h6 class="border-bottom pb-2 mb-3 mt-4"><i class="bi bi-chat-left-text"></i> Observaciones</h6>
+                            <div class="alert alert-info">${data.observaciones}</div>
+                        `;
+                    }
+
+                    modalBody.innerHTML = html;
+                })
+                .catch(error => {
+                    modalBody.innerHTML = `<div class="alert alert-danger">Error al cargar los detalles: ${error.message}</div>`;
+                });
+        }
     </script>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4 mt-0">
+        <div class="container">
+            <div class="text-center">
+                <p class="mb-1 fw-light">Sistema de Reservas - Refugio de Montaña</p>
+                <p class="mb-3 small" style="color: #adb5bd;">
+                    Desarrollado por <a href="https://ivandevs.netlify.app" target="_blank" class="text-info text-decoration-none fw-semibold">Iván Bazaga</a>
+                </p>
+                <div class="d-flex justify-content-center gap-4">
+                    <a href="mailto:ivan.cpweb@gmail.com" class="text-info text-decoration-none" title="Email">
+                        <i class="bi bi-envelope fs-4"></i>
+                    </a>
+                    <a href="https://github.com/IvBanzaga" target="_blank" class="text-info text-decoration-none" title="GitHub">
+                        <i class="bi bi-github fs-4"></i>
+                    </a>
+                    <a href="https://www.linkedin.com/in/ivan-bazaga" target="_blank" class="text-info text-decoration-none" title="LinkedIn">
+                        <i class="bi bi-linkedin fs-4"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
 </body>
 </html>
 
